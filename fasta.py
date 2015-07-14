@@ -1,16 +1,25 @@
 import os.path as op
 import subprocess as sp
 
-
 class ParseFasta:
     """utility functions to parse fasta"""
 
-    def __init__(self, fasta_file = ''):
-        if len(fasta_file) > 0:
-            assert isinstance(fasta_file, str)
-            assert op.isfile(fasta_file)
-            assert op.isfile(fasta_file + '.fai')
-            self.fasta_file = fasta_file
+    def __init__(self, fasta_file):
+        assert isinstance(fasta_file, str)
+        assert op.isfile(fasta_file)
+        assert op.isfile(fasta_file + '.fai')
+        self.fasta_file = fasta_file
+
+    def get_trans_seqs(self, trans_exons):
+        assert self.has_fasta()
+        trans_seqs = {}
+        for trans in trans_exons.keys():
+            seq = ''
+            for exon in trans_exons[trans]:
+                chr_pos = exon[0] + ':' + exon[1] + '-' + exon[2]
+                seq += self.get_fasta(chr_pos, exon[3])
+            trans_seqs[trans] = seq
+        return trans_seqs
 
     def get_fasta(self, chr_pos, strand):
         assert self.has_fasta()
