@@ -1,6 +1,5 @@
 import subprocess as sp
 
-
 class RnaFold:
     """handler for RNAfold programs"""
 
@@ -9,12 +8,13 @@ class RnaFold:
 
     def trans_plfolds(self, trans_seqs, wind_size=70):
         """determines plfold scores of trans_seq
-        :param trans_seqs: {'ENST000024631: 'CGATCGTTACGCGTATTAG...'}
-        :returns {'ENST000024631: [0.123, 0.352, ...]}
+        :param trans_seqs: {'ENST000024631': 'CGATCGTTACGCGTATTAG...'}
+        :returns {'ENST000024631: [0.123, 1499541: 0.352, ...]}
         """
         trans_folds = {}
         for trans, seq in trans_seqs.items():
-            trans_folds[trans] = self.plfold(seq, wind_size)
+            folds = self.plfold(seq, wind_size)
+            trans_folds[trans] = 1
         return trans_folds
 
     def plfold(self, seq, wind_size=70):
@@ -34,6 +34,6 @@ class RnaFold:
         for linea in open(fin).readlines():
             splat = [x for x in linea.split(' ') if x]
             assert len(splat) == 3
-            fold_array[int(splat[0]) - 1] += round(float(splat[2]), 3)
-            fold_array[int(splat[1]) - 1] += round(float(splat[2]), 3)
-        return fold_array
+            fold_array[int(splat[0]) - 1] += float(splat[2])
+            fold_array[int(splat[1]) - 1] += float(splat[2])
+        return [round(x, 3) for x in fold_array]

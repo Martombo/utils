@@ -66,10 +66,10 @@ class Gtf:
             attr_dic[attr_key] = attr_item
         return attr_dic
 
-    def np_trans_exon(self, trans_exon=None):
-        """gets transcript exons coordinates
-        gtf must be sorted by transcript exons number
-        or trans_exon must be provided
+    def trans_exon2np(self, trans_exon):
+        """converts trans_exon (see self.get_trans_exon()) to numpy array
+        which is sorted by position (chr, start)
+        :param trans_exon: {'ENST000024631: [['chr1', '12623', '13486', '+'], [...]]}
         :returns np.array: chr,start,stop,strand,trans
         """
         if not trans_exon:
@@ -79,10 +79,10 @@ class Gtf:
             for exon in exons:
                 exon.append(trans)
                 arr.append(tuple(exon))
-        dtype = [('chr', 'S15'), ('start', int), ('stop', int), ('strand', 'S1'), ('trans', 'S15')]
+        dtype = [('chr', 'U15'), ('start', int), ('stop', int), ('strand', 'U1'), ('trans', 'U15')]
         np_arr = np.array(arr, dtype)
+        np_arr = np.sort(np_arr, order=['chr', 'start'])
         return np.sort(np_arr, order=['chr', 'start'])
-
 
 class Fasta:
     """utility functions to parse fasta"""
@@ -95,7 +95,7 @@ class Fasta:
 
     def get_trans_seqs(self, trans_exons):
         """determines the sequence of a trans_exons dic
-        as provided by Gtf.get_trans_exons()
+        as provided by Gtf.get_trans_exon()
         :param trans_exons {'ENST000024631: [['chr1', '12623', '13486', '+'], [...]]}
         :returns {'ENST000024631: 'CGATCGTTACGCGTATTAG...'}
         """
@@ -115,7 +115,7 @@ class Fasta:
         """
         assert self._has_fasta()
         samtools_cmm = ['samtools', 'faidx', self.fasta_file, chr_pos]
-        samtools_out = sp.check_output(samtools_cmm)
+        samtools_out = sp.check_output(samtools_cmm).decode()
         seq = self.fasta2seq(samtools_out)
         if strand == '-':
             seq = self.comp_rev(seq)
@@ -155,10 +155,10 @@ class Bed:
         :returns np.array: chr,pos,strand,score
         """
         chr_pos_score = []
-        dtype = [('chr', 'S15'), ('pos', int), ('strand', 'S1'), ('score', int)]
+        dtype = [('chr', 'U15'), ('pos', int), ('strand', 'U1'), ('score', int)]
         for linea in open(self.bed_path).readlines():
             dic = self._parse_line6(linea)
-            chr_pos_score.append((dic['chr'], dic['start'], dic['strand'], dic['score']))
+            chr_pos_score.append((dic['chr'], dic['first'], dic['strand'], dic['score']))
         return np.array(chr_pos_score, dtype)
 
     def _parse_line6(self, linea):
