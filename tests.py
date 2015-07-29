@@ -2,6 +2,7 @@ import unittest as ut
 import parsers as ps
 import unittest.mock as um
 import handlers as hn
+import functions as fn
 
 class TestFasta(ut.TestCase):
     parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa')
@@ -160,9 +161,140 @@ class TestRnafold(ut.TestCase):
 
 class TestIntersecter(ut.TestCase):
 
-    def test_match(self):
-        pass
+    sites = [{'chr': 'X', 'pos': 1000, 'strand': '+'}]
+    regions = [{'chr': 'X', 'start': 900, 'stop': 1100, 'strand': '+', 'trans': 'trans1'}]
 
+    def test_match(self):
+        dummy_counter = fn.Intersecter.Counter()
+        intersecter = fn.Intersecter(self.sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(1, len(results))
+
+    def test_nomatch(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = [{'chr': 'X', 'pos': 10000, 'strand': '+'}]
+        intersecter = fn.Intersecter(sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(0, len(results))
+
+    def test_strand(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = [{'chr': 'X', 'pos': 1000, 'strand': '-'}]
+        intersecter = fn.Intersecter(sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(0, len(results))
+
+    def test_chr(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = self.sites + [{'chr': 'Y', 'pos': 1000, 'strand': '+'}]
+        intersecter = fn.Intersecter(sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(1, len(results))
+
+    def test_2matches(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = self.sites + [{'chr': 'X', 'pos': 1010, 'strand': '+'}]
+        intersecter = fn.Intersecter(sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(2, len(results))
+
+    def test_site_move(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = [{'chr': 'X', 'pos': 10, 'strand': '+'}] + self.sites
+        intersecter = fn.Intersecter(sites, self.regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(1, len(results))
+
+    def test_region_move(self):
+        dummy_counter = fn.Intersecter.Counter()
+        regions = [{'chr': 'X', 'start': 90, 'stop': 100, 'strand': '+', 'trans': 'trans1'}] + self.regions
+        intersecter = fn.Intersecter(self.sites, regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(1, len(results))
+
+    def test_chr_switch(self):
+        dummy_counter = fn.Intersecter.Counter()
+        sites = [{'chr': 'A', 'pos': 10, 'strand': '+'}] + self.sites
+        regions = [{'chr': 'A', 'start': 90, 'stop': 100, 'strand': '+', 'trans': 'trans1'}] + self.regions
+        intersecter = fn.Intersecter(sites, regions, dummy_counter)
+        intersecter.intersect()
+        results = dummy_counter.get_results()
+        self.assertEquals(1, len(results))
+
+class TestFoldsCounter(ut.TestCase):
+
+    exons = [['1', 1, 10, '+'], ['1', 101, 110, '+']]
+    exons_strand = [['1', 211, 230, '-'], ['1', 1, 10, '-']]
+    trans_exons = {'trans1': exons}
+    trans_exons_strand = {'trans1': exons_strand}
+    trans_folds = {'trans1': [0,0,0,1,1,1,1,1,0,0,0,0,1,1,1,1,1,0,0,0]}
+    trans_folds_strand = {'trans1': range(30)}
+    counter = fn.Intersecter.FoldsCounter(trans_folds, trans_exons, 1)
+    counter_strand = fn.Intersecter.FoldsCounter(trans_folds_strand, trans_exons_strand, 1)
+    region = {'trans': 'trans1'}
+
+    def test_pos2index0(self):
+        i = self.counter._pos2index(self.exons, 1)
+        self.assertEquals(0, i)
+
+    def test_pos2index9(self):
+        i = self.counter._pos2index(self.exons, 10)
+        self.assertEquals(9, i)
+
+    def test_pos2index15(self):
+        i = self.counter._pos2index(self.exons, 106)
+        self.assertEquals(15, i)
+
+    def test_pos2index0_strand(self):
+        i = self.counter._pos2index(self.exons_strand, 230)
+        self.assertEquals(0, i)
+
+    def test_pos2index29_strand(self):
+        i = self.counter._pos2index(self.exons_strand, 1)
+        self.assertEquals(29, i)
+
+    def test_countit_first(self):
+        site = {'pos': 2, 'score': 10}
+        self.counter.restart()
+        self.counter.countit(site, self.region)
+        results = self.counter.get_results()
+        self.assertEquals([0,0,0], results[0][0])
+        self.assertEquals(10, results[0][1])
+
+    def test_countit_last(self):
+        site = {'pos': 109, 'score': 10}
+        self.counter.restart()
+        self.counter.countit(site, self.region)
+        results = self.counter.get_results()
+        self.assertEquals([0,0,0], results[0][0])
+
+    def test_countit_middle(self):
+        site = {'pos': 107, 'score': 10}
+        self.counter.restart()
+        self.counter.countit(site, self.region)
+        results = self.counter.get_results()
+        self.assertEquals([1,1,0], results[0][0])
+
+    def test_countit_strand(self):
+        site = {'pos': 229, 'score': 10}
+        self.counter_strand.restart()
+        self.counter_strand.countit(site, self.region)
+        results = self.counter_strand.get_results()
+        self.assertEquals(range(3), results[0][0])
+
+    def test_countit_strand(self):
+        site = {'pos': 212, 'score': 10}
+        self.counter_strand.restart()
+        self.counter_strand.countit(site, self.region)
+        results = self.counter_strand.get_results()
+        self.assertEquals(range(17,20), results[0][0])
 
 if __name__ == '__main__':
     ut.main()

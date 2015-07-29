@@ -9,12 +9,11 @@ class RnaFold:
     def trans_plfolds(self, trans_seqs, wind_size=70):
         """determines plfold scores of trans_seq
         :param trans_seqs: {'ENST000024631': 'CGATCGTTACGCGTATTAG...'}
-        :returns {'ENST000024631: [0.123, 1499541: 0.352, ...]}
+        :returns {'ENST000024631: [0.123, 0.352, ...]}
         """
         trans_folds = {}
         for trans, seq in trans_seqs.items():
-            folds = self.plfold(seq, wind_size)
-            trans_folds[trans] = 1
+            trans_folds[trans] = self.plfold(seq, wind_size)
         return trans_folds
 
     def plfold(self, seq, wind_size=70):

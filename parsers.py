@@ -1,7 +1,100 @@
 import os.path as op
 import numpy as np
 import subprocess as sp
+import pysam as ps
 import re
+
+class Bam:
+    """utility functions to parse bam"""
+
+    def __init__(self, bam_file, reads_orientation = 'forward'):
+        """
+        bam file must be indexed
+        :param reads_orientation: either 'forward' or 'reverse'
+        """
+        assert op.isfile(bam_file)
+        assert op.isfile(bam_file + '.bai')
+        self.bam_file = ps.AlignmentFile(bam_file,'rb')
+        self.reads_orientation = reads_orientation
+
+    def get_coverage(self, chrom, start, stop, min_qual=40):
+        """
+        get the number of reads in region
+        :param min_qual: default only uniquely mapped reads
+        """
+        fetch = self.bam_file.fetch(chrom, start, stop)
+        return len(fetch)                               # does it work?
+
+    def get_splice_sites(self, min_qual=40):
+        """
+        get splice sites counts as dictionary
+        :param min_qual: default only uniquely mapped reads
+        :return: dict: {"chr1_12038_12759_+": 56, ...}
+        """
+        self.splices_dic = {}
+        for read in self.bam_file.fetch():
+            if read.mapq < min_qual:
+                continue
+            read_splicer = self._read_splicer(read)
+            read_splice_sites = read_splicer.get_sites()
+            if not read_splice_sites:
+                continue
+            chrom = self.sam_file.getrname(read.reference_id)
+            for read_splice_site in read_splice_sites:
+                strand = self._determine_strand(read)
+                self._add2dict(read_splice_site, chrom, strand)
+        return self.splices_dic
+
+
+    def _add2dict(self, splice_site, chrom, strand):
+        locus_string = '_'.join([str(x) for x in [chrom, splice_site[0], splice_site[1], strand]])
+        if locus_string in self.splices_dic:
+            self.splices_dic[locus_string] += 1
+        else:
+            self.splices_dic[locus_string] = 1
+
+
+    def _determine_strand(self, read):
+        strand_bool = True
+        if read.is_reverse:
+            strand_bool = not strand_bool
+        if self.reads_orientation == 'reverse':
+            strand_bool = not strand_bool
+        if read.is_read2:
+            strand_bool = not strand_bool
+        return '+' if strand_bool else '-'
+
+    class _read_splicer:
+        """
+        handles read info about splicing (junction) gaps
+        """
+        def __init__(self, read):
+            self.before_splice = True
+            self.pos = read.reference_start
+            self.splice_sites = []
+            self.start_site = 0
+
+        def get_sites(self):
+            """
+            computes the donor and acceptor sites (junction) of a read
+            :param read: a pysam read
+            :return: list of donor and acceptor position: [[152683, 153107],[153194, 153867]]
+                     None if read overlaps no junction
+            """
+            for cigar_part in self.read.cigar:
+                if cigar_part[0] == 0:          # match
+                    if not self.before_splice:
+                        self.splice_sites.append((self.start_site,self.pos))
+                        self.before_splice = True
+                    self.pos += cigar_part[1]
+                elif cigar_part[0] == 3:        # non-match
+                    if self.before_splice:
+                        self.before_splice = False
+                        start_site = self.pos
+                    self.pos += cigar_part[1]
+                elif cigar_part[0] == 2:        # deletion
+                    self.pos += cigar_part[1]
+            return self.splice_sites
 
 
 class Gtf:
