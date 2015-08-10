@@ -16,6 +16,7 @@ class Bam:
         assert op.isfile(bam_file + '.bai')
         self.bam_file = ps.AlignmentFile(bam_file,'rb')
         self.reads_orientation = reads_orientation
+        self.splices_dic = {}
 
     def get_coverage(self, chrom, start, stop, min_qual=40):
         """
@@ -23,23 +24,27 @@ class Bam:
         :param min_qual: default only uniquely mapped reads
         """
         fetch = self.bam_file.fetch(chrom, start, stop)
-        return len(fetch)                               # does it work?
+        n_reads = 0
+        for read in fetch:
+            if read.mapq >= min_qual:
+                n_reads += 1
+        return n_reads
 
     def get_splice_sites(self, min_qual=40):
         """
         get splice sites counts as dictionary
         :param min_qual: default only uniquely mapped reads
+        :param min_qual: default only uniquely mapped reads
         :return: dict: {"chr1_12038_12759_+": 56, ...}
         """
-        self.splices_dic = {}
         for read in self.bam_file.fetch():
             if read.mapq < min_qual:
                 continue
-            read_splicer = self._read_splicer(read)
+            read_splicer = self._read_splicer(read.cigar, read.reference_start)
             read_splice_sites = read_splicer.get_sites()
             if not read_splice_sites:
                 continue
-            chrom = self.sam_file.getrname(read.reference_id)
+            chrom = self.bam_file.getrname(read.reference_id)
             for read_splice_site in read_splice_sites:
                 strand = self._determine_strand(read)
                 self._add2dict(read_splice_site, chrom, strand)
@@ -68,11 +73,11 @@ class Bam:
         """
         handles read info about splicing (junction) gaps
         """
-        def __init__(self, read):
+        def __init__(self, cigar, start):
             self.before_splice = True
-            self.pos = read.reference_start
+            self.pos = start
+            self.cigar = cigar
             self.splice_sites = []
-            self.start_site = 0
 
         def get_sites(self):
             """
@@ -81,20 +86,29 @@ class Bam:
             :return: list of donor and acceptor position: [[152683, 153107],[153194, 153867]]
                      None if read overlaps no junction
             """
-            for cigar_part in self.read.cigar:
-                if cigar_part[0] == 0:          # match
-                    if not self.before_splice:
-                        self.splice_sites.append((self.start_site,self.pos))
-                        self.before_splice = True
-                    self.pos += cigar_part[1]
-                elif cigar_part[0] == 3:        # non-match
-                    if self.before_splice:
-                        self.before_splice = False
-                        start_site = self.pos
-                    self.pos += cigar_part[1]
-                elif cigar_part[0] == 2:        # deletion
-                    self.pos += cigar_part[1]
+            for cigar_part in self.cigar:
+                if cigar_part[0] == 0:
+                    self._match(cigar_part[1])
+                elif cigar_part[0] == 3:
+                    self._non_match(cigar_part[1])
+                elif cigar_part[0] == 2:
+                    self._move_pos(cigar_part[1])
             return self.splice_sites
+
+        def _match(self, leng):
+            if not self.before_splice:
+                self.splice_sites.append((self.start_site,self.pos))
+                self.before_splice = True
+            self._move_pos(leng)
+
+        def _non_match(self, leng):
+            if self.before_splice:
+                self.before_splice = False
+                self.start_site = self.pos
+            self._move_pos(leng)
+
+        def _move_pos(self, leng):
+            self.pos += leng
 
 
 class Gtf:
@@ -250,9 +264,21 @@ class Bed:
         chr_pos_score = []
         dtype = [('chr', 'U15'), ('pos', int), ('strand', 'U1'), ('score', int)]
         for linea in open(self.bed_path).readlines():
-            dic = self._parse_line6(linea)
-            chr_pos_score.append((dic['chr'], dic['first'], dic['strand'], dic['score']))
+            dic = self._parse_tophat(linea)
+            if dic:
+                chr_pos_score.append((dic['chr'], dic['first'], dic['strand'], dic['score']))
         return np.array(chr_pos_score, dtype)
+
+    def _parse_tophat(self, linea):
+        """parses a bed line, with 5 columns, strand is before score
+        :returns {chr, start, stop, score, strand, first_base}
+        """
+        splat = linea.rstrip('\n').split('\t')
+        if len(splat) < 5:
+            return None
+        first = int(splat[1]) + 1 if splat[3] == '+' else int(splat[2])
+        return dict(chr=splat[0], start=int(splat[1]), stop=int(splat[2]), score=int(splat[4]),
+                    strand=splat[3], first=first)
 
     def _parse_line6(self, linea):
         """parses a bed line, with at least 6 columns

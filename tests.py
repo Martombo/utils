@@ -3,6 +3,7 @@ import parsers as ps
 import unittest.mock as um
 import handlers as hn
 import functions as fn
+import pysam
 
 class TestFasta(ut.TestCase):
     parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa')
@@ -295,6 +296,69 @@ class TestFoldsCounter(ut.TestCase):
         self.counter_strand.countit(site, self.region)
         results = self.counter_strand.get_results()
         self.assertEquals(range(17,20), results[0][0])
+
+
+class TestBam(ut.TestCase):
+
+    parser = ps.Bam('/Users/martin/sware/samtools-1.2/test/dat/test_input_1_a.bam')
+    read = pysam.AlignedSegment()
+    bam_fields = ['asd', '0', 'chr1', '100', '50', '100M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
+
+    def test_det_strand(self):
+        self.read.is_reverse = False
+        self.read.is_read2 = False
+        strand = self.parser._determine_strand(self.read)
+        self.assertEquals('+', strand)
+
+    def test_det_strand_rev(self):
+        self.read.is_reverse = True
+        self.read.is_read2 = False
+        strand = self.parser._determine_strand(self.read)
+        self.assertEquals('-', strand)
+
+    def test_det_strand_mate(self):
+        self.read.is_reverse = False
+        self.read.is_read2 = True
+        strand = self.parser._determine_strand(self.read)
+        self.assertEquals('-', strand)
+
+    def test_det_strand_rev_mate(self):
+        self.read.is_reverse = True
+        self.read.is_read2 = True
+        strand = self.parser._determine_strand(self.read)
+        self.assertEquals('+', strand)
+
+    def test_det_strand_opp(self):
+        parser = ps.Bam('/Users/martin/sware/samtools-1.2/test/dat/test_input_1_a.bam', reads_orientation='reverse')
+        self.read.is_reverse = False
+        self.read.is_read2 = False
+        strand = parser._determine_strand(self.read)
+        self.assertEquals('-', strand)
+
+    def test_add2dict(self):
+        self.parser._add2dict([100,200], 'chr1', '+')
+        dic = self.parser.splices_dic
+        self.assertEquals(1, len(dic))
+        self.assertEquals(1, dic['chr1_100_200_+'])
+
+    def test_add2dict(self):
+        self.parser._add2dict([300,500], 'chr2', '-')
+        self.parser._add2dict([300,500], 'chr2', '-')
+        dic = self.parser.splices_dic
+        self.assertEquals(2, dic['chr2_300_500_-'])
+
+    def test_splicer(self):
+        self.read.cigar = [[0, 10], [3, 100], [0, 10]]
+        splicer = ps.Bam._read_splicer(self.read.cigar, self.read.reference_start)
+        sites = splicer.get_sites()
+        self.assertEquals(1, len(sites))
+
+    def test_get_splice_sites(self):
+        bam = ps.Bam('/Users/martin/Dropbox/codez/python/pycharm/utils/example.bam')
+        splice_sites = bam.get_splice_sites()
+        pass
+
+
 
 if __name__ == '__main__':
     ut.main()

@@ -3,8 +3,11 @@ import subprocess as sp
 class RnaFold:
     """handler for RNAfold programs"""
 
-    def __init__(self):
-        pass
+    def __init__(self, msg = None):
+        if msg:
+            self.msg = msg
+        else:
+            self.msg = lambda x: print(x)
 
     def trans_plfolds(self, trans_seqs, wind_size=70):
         """determines plfold scores of trans_seq
@@ -12,8 +15,13 @@ class RnaFold:
         :returns {'ENST000024631: [0.123, 0.352, ...]}
         """
         trans_folds = {}
+        k = 0
+        self.msg('total transcripts: ' + str(len(trans_seqs)))
         for trans, seq in trans_seqs.items():
             trans_folds[trans] = self.plfold(seq, wind_size)
+            k += 1
+            if k % 1000 == 0:
+                self.msg('folded ' + str(k) + ' transcripts')
         return trans_folds
 
     def plfold(self, seq, wind_size=70):
@@ -33,6 +41,12 @@ class RnaFold:
         for linea in open(fin).readlines():
             splat = [x for x in linea.split(' ') if x]
             assert len(splat) == 3
-            fold_array[int(splat[0]) - 1] += float(splat[2])
-            fold_array[int(splat[1]) - 1] += float(splat[2])
+            fold_array = self._add_score(fold_array, splat[0], splat[2])
+            fold_array = self._add_score(fold_array, splat[1], splat[2])
         return [round(x, 3) for x in fold_array]
+
+    def _add_score(self, fold_array, pos_str, score):
+        pos = int(pos_str) - 1
+        if 0 <= pos < len(fold_array):
+            fold_array[pos] += float(score)
+        return fold_array
