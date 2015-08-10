@@ -21,7 +21,11 @@ class Bam:
     def get_coverage(self, chrom, start, stop, min_qual=40):
         """
         get the number of reads in region
-        :param min_qual: default only uniquely mapped reads
+        reads is counted even if only 1 base overlaps region
+        :param chrom: str chromosome name
+        :param start: int start
+        :param stop: int stop
+        :param min_qual: default TopHat: only uniquely mapped reads
         """
         fetch = self.bam_file.fetch(chrom, start, stop)
         n_reads = 0
@@ -33,9 +37,8 @@ class Bam:
     def get_splice_sites(self, min_qual=40):
         """
         get splice sites counts as dictionary
-        :param min_qual: default only uniquely mapped reads
-        :param min_qual: default only uniquely mapped reads
-        :return: dict: {"chr1_12038_12759_+": 56, ...}
+        :param min_qual: default TopHat only uniquely mapped reads
+        :return dict: {"chr1_12038_12759_+": 56, ...}
         """
         for read in self.bam_file.fetch():
             if read.mapq < min_qual:
@@ -58,7 +61,6 @@ class Bam:
         else:
             self.splices_dic[locus_string] = 1
 
-
     def _determine_strand(self, read):
         strand_bool = True
         if read.is_reverse:
@@ -71,7 +73,9 @@ class Bam:
 
     class _read_splicer:
         """
-        handles read info about splicing (junction) gaps
+        retrieves read info about splicing (junction) gaps
+        :param cigar: read cigar string
+        :param start: read mapping start position
         """
         def __init__(self, cigar, start):
             self.before_splice = True
@@ -82,8 +86,7 @@ class Bam:
         def get_sites(self):
             """
             computes the donor and acceptor sites (junction) of a read
-            :param read: a pysam read
-            :return: list of donor and acceptor position: [[152683, 153107],[153194, 153867]]
+            :return list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
                      None if read overlaps no junction
             """
             for cigar_part in self.cigar:

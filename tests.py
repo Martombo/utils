@@ -4,6 +4,7 @@ import unittest.mock as um
 import handlers as hn
 import functions as fn
 import pysam
+import os
 
 class TestFasta(ut.TestCase):
     parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa')
@@ -300,7 +301,9 @@ class TestFoldsCounter(ut.TestCase):
 
 class TestBam(ut.TestCase):
 
-    parser = ps.Bam('/Users/martin/sware/samtools-1.2/test/dat/test_input_1_a.bam')
+    bam_file = 'example.bam'
+    assert os.path.isfile(bam_file)
+    parser = ps.Bam(bam_file)
     read = pysam.AlignedSegment()
     bam_fields = ['asd', '0', 'chr1', '100', '50', '100M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
 
@@ -329,7 +332,7 @@ class TestBam(ut.TestCase):
         self.assertEquals('+', strand)
 
     def test_det_strand_opp(self):
-        parser = ps.Bam('/Users/martin/sware/samtools-1.2/test/dat/test_input_1_a.bam', reads_orientation='reverse')
+        parser = ps.Bam(self.bam_file, reads_orientation='reverse')
         self.read.is_reverse = False
         self.read.is_read2 = False
         strand = parser._determine_strand(self.read)
@@ -340,24 +343,38 @@ class TestBam(ut.TestCase):
         dic = self.parser.splices_dic
         self.assertEquals(1, len(dic))
         self.assertEquals(1, dic['chr1_100_200_+'])
+        self.parser.splices_dic = {}
 
     def test_add2dict(self):
         self.parser._add2dict([300,500], 'chr2', '-')
         self.parser._add2dict([300,500], 'chr2', '-')
         dic = self.parser.splices_dic
         self.assertEquals(2, dic['chr2_300_500_-'])
+        self.parser.splices_dic = {}
 
-    def test_splicer(self):
-        self.read.cigar = [[0, 10], [3, 100], [0, 10]]
-        splicer = ps.Bam._read_splicer(self.read.cigar, self.read.reference_start)
+    def test_splicer_get_sites(self):
+        cigar = [[0, 10], [3, 100], [0, 10]]
+        reference_start = 90
+        splicer = ps.Bam._read_splicer(cigar, reference_start)
         sites = splicer.get_sites()
         self.assertEquals(1, len(sites))
+        self.assertEquals(2, len(sites[0]))
+        self.assertEquals(100, sites[0][0])
+        self.assertEquals(200, sites[0][1])
 
     def test_get_splice_sites(self):
-        bam = ps.Bam('/Users/martin/Dropbox/codez/python/pycharm/utils/example.bam')
-        splice_sites = bam.get_splice_sites()
-        pass
+        splice_sites = self.parser.get_splice_sites()
+        self.assertEquals(3, len(splice_sites))
+        self.assertTrue('1_12227_12612_-' in splice_sites)
+        self.assertTrue(1, splice_sites['1_12227_12612_-'])
 
+    def test_get_coverage(self):
+        cov = self.parser.get_coverage('1', 10000, 11000, min_qual = 0)
+        self.assertEquals(cov, 1)
+
+    def test_get_coverage_min(self):
+        cov = self.parser.get_coverage('1', 10000, 10020, min_qual = 0)
+        self.assertEquals(cov, 1)
 
 
 if __name__ == '__main__':
