@@ -7,7 +7,7 @@ import pysam
 import os
 
 class TestFasta(ut.TestCase):
-    parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa')
+    parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa', test=True)
     seq0 = 'ACTGACTG'
     seq1 = 'CGGAAGTGACCGTGGTGGCTTCAATAAATTTGGTG'
     pos1 = '16:31186802-31186836'
@@ -37,16 +37,18 @@ GAATTAATAAATAAAAATGTTCTTGAAAGACAGAAATTAATATGCAGTTCATACTGTCAGAATTGCAGGCAATTTATCAA
         self.assertEquals(self.parser.comp_rev(self.seq1), self.parser.get_fasta(self.pos1, '-'))
 
     def test_trans_seq(self):
-        seq_out = self.parser.get_trans_seqs(self.trans_exons)
-        self.assertEquals(self.seq_exp, seq_out['trans123'])
+        if os.path.isdir('/Users/martin'):
+            seq_out = self.parser.get_trans_seqs(self.trans_exons)
+            self.assertEquals(self.seq_exp, seq_out['trans123'])
 
     def test_trans_seq_strand(self):
-        seq_out = self.parser.get_trans_seqs(self.trans_exons_strand)
-        self.assertEquals(self.parser.comp_rev(self.seq_exp), seq_out['trans123'])
+        if os.path.isdir('/Users/martin'):
+            seq_out = self.parser.get_trans_seqs(self.trans_exons_strand)
+            self.assertEquals(self.parser.comp_rev(self.seq_exp), seq_out['trans123'])
 
 
 class TestBed(ut.TestCase):
-    parser = ps.Bed('/Users/martin/Dropbox/projects/year2/joel_clip/fold/prova.bed')
+    parser = ps.Bed('prova.bed', test=True)
     linea = '\t'.join(['1', '10928', '14598', 'lulli', '10', '+'])
     linea_strand = '\t'.join(['1', '10928', '14598', 'lulli', '10', '-'])
 
@@ -73,7 +75,7 @@ class TestBed(ut.TestCase):
 
 
 class TestGtf(ut.TestCase):
-    parser = ps.Gtf('/Users/martin/Dropbox/utils/genes/hg38/Homo_sapiens.GRCh38.80toy.gtf')
+    parser = ps.Gtf('/Users/martin/Dropbox/utils/genes/Homo_sapiens.GRCh38.80toy.gtf', test=True)
     attr = 'gene_id "ENSG00000223972"; gene_version "5"; gene_name "DDX11L1"; gene_source "havana"; \
 gene_biotype "transcribed_unprocessed_pseudogene"; transcript_id "ENST00000249857";'
     linea = '\t'.join(['1', 'havana', 'gene', '11869', '14409', '.', '+', '.', attr])
@@ -144,13 +146,12 @@ class TestRnafold(ut.TestCase):
     plfold_out = '1  2  0.1' + '\n' + '1  3  0.2'
     scores_exp = [0.3, 0.1, 0.2]
     handler = hn.RnaFold()
+    rnaPLfolder = handler.PlFold()
     seq = ''.join([x*10 for x in ['N', 'A', 'N', 'T', 'N']])
 
-    def test_parse_plfold(self):
-        with um.patch('handlers.open', um.mock_open(read_data=self.plfold_out), create=True) as m:
-            scores = self.handler._parse_plfold(fin = 'mock', len_seq = len(self.scores_exp))
-            for i in range(len(self.scores_exp)):
-                self.assertAlmostEqual(self.scores_exp[i], scores[i])
+    def test_compute(self):
+        self.rnaPLfolder.compute(self.seq)
+        os.remove('plfold_basepairs')
 
     def test_trans_plfold(self):
         seq_scores = self.handler.plfold(self.seq)
@@ -159,6 +160,7 @@ class TestRnafold(ut.TestCase):
         suma = sum(seq_scores)
         self.assertLess(suma, 20)
         self.assertGreater(suma, 15)
+        os.remove('plfold_basepairs')
 
 
 class TestIntersecter(ut.TestCase):
@@ -291,7 +293,7 @@ class TestFoldsCounter(ut.TestCase):
         results = self.counter_strand.get_results()
         self.assertEquals(range(3), results[0][0])
 
-    def test_countit_strand(self):
+    def test_countit_strand2(self):
         site = {'pos': 212, 'score': 10}
         self.counter_strand.restart()
         self.counter_strand.countit(site, self.region)
@@ -369,12 +371,19 @@ class TestBam(ut.TestCase):
         self.assertTrue(1, splice_sites['1_12227_12612_-'])
 
     def test_get_coverage(self):
-        cov = self.parser.get_coverage('1', 10000, 11000, min_qual = 0)
+        cov = self.parser.get_coverage('1', 10000, 11000, min_qual=0)
         self.assertEquals(cov, 1)
 
     def test_get_coverage_min(self):
-        cov = self.parser.get_coverage('1', 10000, 10020, min_qual = 0)
+        cov = self.parser.get_coverage('1', 10000, 10020, min_qual=0)
         self.assertEquals(cov, 1)
+
+    def test_sam_input(self):
+        header = '\t'.join(['@SQ','SN:chr1','LN:1000000'])
+        line1 = '\t'.join(self.bam_fields)
+        sam_data = '\n'.join([header, line1])
+        bam = ps.Bam(sam_data=sam_data)
+        bam.delete()
 
 
 if __name__ == '__main__':

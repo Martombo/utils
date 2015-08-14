@@ -3,7 +3,7 @@ import subprocess as sp
 class RnaFold:
     """handler for RNAfold programs"""
 
-    def __init__(self, msg = None):
+    def __init__(self, msg=None):
         if msg:
             self.msg = msg
         else:
@@ -50,3 +50,51 @@ class RnaFold:
         if 0 <= pos < len(fold_array):
             fold_array[pos] += float(score)
         return fold_array
+
+
+    class FoldProgram:
+
+        def __init__(self, program):
+            self._set_program(program)
+
+        def _set_program(self, program):
+            self.program = program
+
+        def _run(self, seq, options):
+            p1 = sp.Popen(['echo', seq], stdout=sp.PIPE)
+            p2 = sp.Popen([self.program] + options, stdin=p1.stdout)
+            p1.stdout.close()
+            out_err = p2.communicate()
+            return out_err[0]
+
+        def _parse_output(self, output):
+            return output
+
+        def compute(self, seq, options=[]):
+            output = self._run(seq, options)
+            return self._parse_output(output)
+
+    class PlFold(FoldProgram):
+
+        def __init__(self):
+            super().__init__('RNAplfold')
+
+        def compute(self, seq, wind_size=70):
+            self.len_seq = len(seq)
+            wind_size = min(wind_size, self.len_seq)
+            super().compute(seq, ['-W', str(wind_size), '-o'])
+
+        def _parse_output(self, output):
+            fold_array = [0] * self.len_seq
+            for linea in open('plfold_basepairs').readlines():
+                splat = [x for x in linea.split(' ') if x]
+                assert len(splat) == 3
+                fold_array = self._add_score(fold_array, splat[0], splat[2])
+                fold_array = self._add_score(fold_array, splat[1], splat[2])
+            return [round(x, 3) for x in fold_array]
+
+        def _add_score(self, fold_array, pos_str, score):
+            pos = int(pos_str) - 1
+            if 0 <= pos < len(fold_array):
+                fold_array[pos] += float(score)
+            return fold_array

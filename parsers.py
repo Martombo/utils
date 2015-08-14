@@ -1,4 +1,4 @@
-import os.path as op
+import os.path
 import numpy as np
 import subprocess as sp
 import pysam as ps
@@ -7,16 +7,28 @@ import re
 class Bam:
     """utility functions to parse bam"""
 
-    def __init__(self, bam_file, reads_orientation = 'forward'):
+    def __init__(self, bam_path='', sam_data='', reads_orientation='forward'):
         """
-        bam file must be indexed
+        sam data can be provided for testing
         :param reads_orientation: either 'forward' or 'reverse'
         """
-        assert op.isfile(bam_file)
-        assert op.isfile(bam_file + '.bai')
-        self.bam_file = ps.AlignmentFile(bam_file,'rb')
+        assert bool(bam_path) != bool(sam_data)
+        if bam_path:
+            assert bam_path[-4:] == '.bam'
+            assert os.path.isfile(bam_path)
+        elif sam_data:
+            bam_path = self.Sam(sam_data = sam_data).toIndexedBam()
+            os.remove('tmp.sam')
+        if not os.path.isfile(bam_path + '.bai'):
+            pIndex = sp.Popen(['samtools', 'index', bam_path])
+            pIndex.communicate()
+        self.bam_file = ps.AlignmentFile(bam_path,'rb')
         self.reads_orientation = reads_orientation
         self.splices_dic = {}
+
+    def delete(self):
+        os.remove(self.bam_file.filename.decode())
+        os.remove(self.bam_file.filename.decode() + '.bai')
 
     def get_coverage(self, chrom, start, stop, min_qual=40):
         """
@@ -71,6 +83,38 @@ class Bam:
             strand_bool = not strand_bool
         return '+' if strand_bool else '-'
 
+    class Sam:
+        """
+        handles Sam data or files.
+        raw data should be provided only for tests.
+        """
+
+        def __init__(self, sam_data='', sam_path=''):
+            assert bool(sam_data) != bool(sam_path)
+            if sam_data:
+                sam_path = 'tmp.sam'
+                with open(sam_path, 'w') as fin:
+                    fin.write(sam_data)
+            self.sam_path = sam_path
+
+        def toIndexedBam(self):
+            bam_file = self._toBam()
+            sorted_bam_path = self._sort(bam_file.filename.decode())
+            os.remove(bam_file.filename.decode())
+            return sorted_bam_path
+
+        def _toBam(self):
+            tmp_bam_path = self.sam_path + '.bam'
+            pView = sp.Popen(['samtools', 'view', '-Sb', '-o', tmp_bam_path, self.sam_path])
+            pView.communicate()
+            return ps.AlignmentFile(tmp_bam_path, 'rb')
+
+        def _sort(self, bam_path):
+            sorted_bam_path = bam_path[:len(bam_path)-8]
+            ps.sort(bam_path, sorted_bam_path)
+            return sorted_bam_path + '.bam'
+
+
     class _read_splicer:
         """
         retrieves read info about splicing (junction) gaps
@@ -117,9 +161,10 @@ class Bam:
 class Gtf:
     """utility functions to parse gtf"""
 
-    def __init__(self, gtf_file):
-        assert isinstance(gtf_file, str)
-        assert op.isfile(gtf_file)
+    def __init__(self, gtf_file, test=False):
+        if not test:
+            assert isinstance(gtf_file, str)
+            assert os.path.isfile(gtf_file)
         self.gtf_path = gtf_file
 
     def get_trans_exon(self):
@@ -197,10 +242,11 @@ class Gtf:
 class Fasta:
     """utility functions to parse fasta"""
 
-    def __init__(self, fasta_file):
-        assert isinstance(fasta_file, str)
-        assert op.isfile(fasta_file)
-        assert op.isfile(fasta_file + '.fai')
+    def __init__(self, fasta_file, test=False):
+        if not test:
+            assert isinstance(fasta_file, str)
+            assert os.path.isfile(fasta_file)
+            assert os.path.isfile(fasta_file + '.fai')
         self.fasta_file = fasta_file
 
     def get_trans_seqs(self, trans_exons):
@@ -255,9 +301,10 @@ class Fasta:
 class Bed:
     """utility functions to parse bed"""
 
-    def __init__(self, bed_file):
-        assert isinstance(bed_file, str)
-        assert op.isfile(bed_file)
+    def __init__(self, bed_file, test=False):
+        if not test:
+            assert isinstance(bed_file, str)
+            assert os.path.isfile(bed_file)
         self.bed_path = bed_file
 
     def get_first(self):

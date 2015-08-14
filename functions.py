@@ -1,6 +1,6 @@
 class Intersecter:
 
-    def __init__(self, sites, regions, counter, strand=True, over_check = 10):
+    def __init__(self, sites, regions, counter, strand=True, over_check=10):
         """applies counter.countit on sites contained in regions
         a site over two overlapping regions will be assigned to both
         it's also not 100% accurate (over_check)
