@@ -303,11 +303,16 @@ class TestFoldsCounter(ut.TestCase):
 
 class TestBam(ut.TestCase):
 
-    bam_file = 'example.bam'
-    assert os.path.isfile(bam_file)
-    parser = ps.Bam(bam_file)
     read = pysam.AlignedSegment()
     bam_fields = ['asd', '0', 'chr1', '100', '50', '100M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
+    splic_fields = ['asd', '0', 'chr1', '100', '50', '50M50N50M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
+    header = '\t'.join(['@SQ','SN:chr1','LN:1000000'])
+    parser = ps.Bam()
+    sam_data = '\n'.join([header, '\t'.join(bam_fields)])
+    splic_data = '\n'.join([header, '\t'.join(splic_fields)])
+    parser_sam = ps.Bam(sam_data=sam_data)
+    parser_splic = ps.Bam(sam_data=splic_data)
+
 
     def test_det_strand(self):
         self.read.is_reverse = False
@@ -334,7 +339,7 @@ class TestBam(ut.TestCase):
         self.assertEquals('+', strand)
 
     def test_det_strand_opp(self):
-        parser = ps.Bam(self.bam_file, reads_orientation='reverse')
+        parser = ps.Bam(reads_orientation='reverse')
         self.read.is_reverse = False
         self.read.is_read2 = False
         strand = parser._determine_strand(self.read)
@@ -347,7 +352,7 @@ class TestBam(ut.TestCase):
         self.assertEquals(1, dic['chr1_100_200_+'])
         self.parser.splices_dic = {}
 
-    def test_add2dict(self):
+    def test_add2dict2(self):
         self.parser._add2dict([300,500], 'chr2', '-')
         self.parser._add2dict([300,500], 'chr2', '-')
         dic = self.parser.splices_dic
@@ -364,26 +369,16 @@ class TestBam(ut.TestCase):
         self.assertEquals(100, sites[0][0])
         self.assertEquals(200, sites[0][1])
 
-    def test_get_splice_sites(self):
-        splice_sites = self.parser.get_splice_sites()
-        self.assertEquals(3, len(splice_sites))
-        self.assertTrue('1_12227_12612_-' in splice_sites)
-        self.assertTrue(1, splice_sites['1_12227_12612_-'])
-
     def test_get_coverage(self):
-        cov = self.parser.get_coverage('1', 10000, 11000, min_qual=0)
+        cov = self.parser_sam.get_coverage('chr1', 10, 1000, min_qual=0)
         self.assertEquals(cov, 1)
+        self.parser_sam.delete()
 
-    def test_get_coverage_min(self):
-        cov = self.parser.get_coverage('1', 10000, 10020, min_qual=0)
-        self.assertEquals(cov, 1)
-
-    def test_sam_input(self):
-        header = '\t'.join(['@SQ','SN:chr1','LN:1000000'])
-        line1 = '\t'.join(self.bam_fields)
-        sam_data = '\n'.join([header, line1])
-        bam = ps.Bam(sam_data=sam_data)
-        bam.delete()
+    def test_get_splice_sites(self):
+        splice_sites = self.parser_splic.get_splice_sites()
+        self.assertEquals(1, len(splice_sites))
+        self.assertTrue('chr1_149_199_+' in splice_sites)
+        self.assertTrue(1, splice_sites['chr1_149_199_+'])
 
 
 if __name__ == '__main__':
