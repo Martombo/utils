@@ -70,7 +70,7 @@ class RnaFold:
         def _parse_output(self, output):
             return output
 
-        def compute(self, seq, options=[]):
+        def compute(self, seq, options):
             output = self._run(seq, options)
             return self._parse_output(output)
 
@@ -98,3 +98,13 @@ class RnaFold:
             if 0 <= pos < len(fold_array):
                 fold_array[pos] += float(score)
             return fold_array
+
+    class Lfold(FoldProgram):
+
+        def __init__(self):
+            super().__init__('RNALfold')
+
+        def compute(self, seq, temp=37, noLP=False):
+            if noLP:
+                LP = '--noLP'
+            super().compute(seq, ['-T', temp, LP])

@@ -1,3 +1,4 @@
+import functions as fn
 import os.path
 import numpy as np
 import subprocess as sp
@@ -430,3 +431,92 @@ class Bed:
             return None
         first = int(splat[1]) + 1 if splat[5] == '+' else int(splat[2])
         return dict(chr=splat[0], start=int(splat[1]), stop=int(splat[2]), first=first)
+
+class Maf:
+    """utility functions to parse maf"""
+
+    def __init__(self, maf_file, main_genome, genomes=[], test=False):
+        if not test:                            # 0 based!!!
+            assert isinstance(maf_file, str)
+            assert os.path.isfile(maf_file)
+        self.maf_file = maf_file
+        self.align_dict = {}
+        self.main_genome = main_genome
+        self.genomes = genomes
+
+    def get_region(self, chr_strand, start, stop):
+        self.chr_strand = chr_strand
+        k = 0
+        pos = self.align_dict[self.chr_strand][self.main_genome][k][1]
+        genome_align = {x:[] for x in [self.main_genome] + self.genomes}
+        while pos < start:
+            (k, pos) = self._advance_pos(k, pos)
+        while pos < stop:
+            for genome_i in [self.main_genome] + self.genomes:
+                genome_align[genome_i].append(self.align_dict[self.chr_strand][self.main_genome][k])
+                if genome_i == self.main_genome:
+                    (k, pos) = self._advance_pos(k, pos)
+        return genome_align
+
+    def _advance_pos(self, index, pos):
+        pos_or_NA = self.align_dict[self.chr_strand][self.main_genome][index][1]
+        if pos_or_NA != 'NA':
+            pos = pos_or_NA
+        index += 1
+        return (index, pos)
+
+    def get_alignments(self):
+        """stores in align_dict the whole MAF file
+        align_dict has keys: chr_strand (eg: 'chr1_+')
+        which is a dict, with keys: genome (eg: 'dm6')
+        which has a list: [['A', 1732], ['-', 'NA'], ['C', 1733], ...]
+        careful for memory usage!
+        """
+        with open(self.maf_file) as fin:
+            for linea in fin.readlines():
+                align_line = self._parse_line(linea)
+                if not align_line or align_line['genome'] not in self.genomes + [self.main_genome]:
+                    continue
+                self._add2dic(align_line)
+        self._fill_missing()
+
+    def _add2dic(self, line):
+        if line['genome'] == self.main_genome:
+            self.chr_strand = '_'.join([line['chr'], line['strand']])
+            self._fill_missing()
+        pos = line['start']
+        self._check_dict_with(self.chr_strand, line['genome'])
+        for k in line['seq']:
+            if k == '-':
+                self.align_dict[self.chr_strand][line['genome']].append([k, 'NA'])
+            else:
+                self.align_dict[self.chr_strand][line['genome']].append([k, pos])
+                pos += 1
+
+    def _fill_missing(self):
+        if self._check_dict_with(self.chr_strand, self.main_genome):
+            ref_len = len(self.align_dict[self.chr_strand][self.main_genome])
+            for genome in self.genomes:
+                self._check_dict_with(self.chr_strand, genome)
+                while len(self.align_dict[self.chr_strand][genome]) < ref_len:
+                    self.align_dict[self.chr_strand][genome].append(['-','NA'])
+
+
+    def _check_dict_with(self, chr_strand, genome):
+        already_in = True
+        if chr_strand not in self.align_dict:
+            self.align_dict[chr_strand] = {}
+            already_in = False
+        if genome not in self.align_dict[chr_strand]:
+            self.align_dict[chr_strand][genome] = []
+            already_in = False
+        return already_in
+
+    def _parse_line(self, line):
+        splat = [x for x in line.rstrip('\n').split(' ') if x]
+        if not splat or splat[0] != 's':
+            return None
+        genome_chr = splat[1].split('.')
+        assert len(splat) == 7
+        assert len(genome_chr) == 2
+        return dict(genome=genome_chr[0], chr=genome_chr[1], start=int(splat[2]), strand=splat[4], seq=splat[6])

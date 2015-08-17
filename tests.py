@@ -381,5 +381,54 @@ class TestBam(ut.TestCase):
         self.assertTrue(1, splice_sites['chr1_149_199_+'])
 
 
+class TestMaf(ut.TestCase):
+    parser = ps.Maf('prova.maf', main_genome='dm6', test=True)
+    header = '##maf version=1 scoring=blastz\n'
+    score = 'a score=1\n'
+    align1 = 's dm6.chr2L        10 4 + 2 ACCG'
+
+    def test_parse_line_header(self):
+        parsed = self.parser._parse_line(self.header)
+        self.assertIsNone(parsed)
+
+    def test_parse_line_score(self):
+        parsed = self.parser._parse_line(self.score)
+        self.assertIsNone(parsed)
+
+    def test_parse_line_align1(self):
+        parsed = self.parser._parse_line(self.align1)
+        self.assertIsNotNone(parsed)
+        self.assertEquals('dm6', parsed['genome'])
+        self.assertEquals('chr2L', parsed['chr'])
+        self.assertEquals(10, parsed['start'])
+        self.assertEquals('+', parsed['strand'])
+        self.assertEquals('ACCG', parsed['seq'])
+
+    def test_genome_align(self):
+        dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
+                                           'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
+        dro_maf = '/Users/martin/Dropbox/projects/microprojects/paula/test.maf'
+        parser = ps.Maf(dro_maf, main_genome='dm6', genomes=dro_genomes)
+        parser.get_alignments()
+        len_dm6 = len(parser.align_dict['chr2L_+']['dm6'])
+        for dro_genome in dro_genomes:
+            self.assertEquals(len_dm6, len(parser.align_dict['chr2L_+'][dro_genome]))
+
+    def test_get_region(self):
+        dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
+                                           'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
+        dro_maf = '/Users/martin/Dropbox/projects/microprojects/paula/test.maf'
+        parser = ps.Maf(dro_maf, main_genome='dm6', genomes=dro_genomes)
+        parser.get_alignments()
+        (start, stop) = (443, 462)
+        region = parser.get_region('chr2L_+', start, stop)
+        len_region = stop - start + 1
+        len_dm6 = len(region['dm6'])
+        for k,i in region.items():
+            self.assertEquals(len_dm6, len(i))
+            while ['-', 'NA'] in i:
+                i.remove(['-', 'NA'])
+            self.assertEquals(len_region, len(i))
+
 if __name__ == '__main__':
     ut.main()

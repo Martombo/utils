@@ -163,3 +163,10 @@ class Random():
             seq += next_letter
 
         return seq
+
+def add2dict(dict, key, value):
+    if key in dict:
+        dict[key].append(value)
+    else:
+        dict[key] = [value]
+    return dict
