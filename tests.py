@@ -147,20 +147,39 @@ class TestRnafold(ut.TestCase):
     scores_exp = [0.3, 0.1, 0.2]
     handler = hn.RnaFold()
     rnaPLfolder = handler.PlFold()
+    rnaLfolder = handler.Lfold()
     seq = ''.join([x*10 for x in ['N', 'A', 'N', 'T', 'N']])
 
     def test_compute(self):
-        self.rnaPLfolder.compute(self.seq)
+        output = self.rnaPLfolder.compute(self.seq)
         os.remove('plfold_basepairs')
+        self.assertGreater(sum(output), 1)
+        self.assertEquals(len(output), 50)
 
-    def test_trans_plfold(self):
-        seq_scores = self.handler.plfold(self.seq)
-        suma10 = sum(seq_scores[:10])
-        self.assertEquals(0, suma10)
-        suma = sum(seq_scores)
-        self.assertLess(suma, 20)
-        self.assertGreater(suma, 15)
+    def test_trans_fold(self):
+        trans = 'trans1'
+        output = self.handler.trans_plfolds({trans:self.seq})
         os.remove('plfold_basepairs')
+        self.assertIn(trans, output)
+        self.assertEquals(1, len(output))
+        self.assertGreater(sum(output[trans]), 1)
+        self.assertEquals(len(output[trans]), 50)
+
+    def test_Lfold(self):
+        seq = 'AAAACAAAAATCGATTTTTTGTTTTT'
+        output = self.rnaLfolder.compute(seq)
+        self.assertIsNotNone(output['fold'])
+        self.assertIsNotNone(output['energy'])
+        self.assertIsNotNone(output['pos'])
+        self.assertEquals(len(output['fold']), 1)
+        self.assertEquals(len(output['fold'][0]), len(seq))
+        defold = output['fold'][0].replace('(','').replace(')','').replace('.','')
+        self.assertIsNotNone(defold)
+
+    def test_Lfold_2seqs(self):
+        seq = 'CCCCAAAAAAGGGGGGTTTTTTN'
+        output = self.rnaLfolder.compute(seq)
+        self.assertEquals(2, len(output['fold']))
 
 
 class TestIntersecter(ut.TestCase):
@@ -386,6 +405,10 @@ class TestMaf(ut.TestCase):
     header = '##maf version=1 scoring=blastz\n'
     score = 'a score=1\n'
     align1 = 's dm6.chr2L        10 4 + 2 ACCG'
+    maf_block = 's dm6.chr2L        443 268 + 23513712 ACCGCAAACCCAA-atcgacaatgcacgaca\n'
+    maf_block +='s droSec1.super_14  39 262 +  2068291 ACCGCAAACCCGAGAAtgccaatactcgaca\n'
+    dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
+                                       'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
 
     def test_parse_line_header(self):
         parsed = self.parser._parse_line(self.header)
@@ -405,30 +428,26 @@ class TestMaf(ut.TestCase):
         self.assertEquals('ACCG', parsed['seq'])
 
     def test_genome_align(self):
-        dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
-                                           'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
-        dro_maf = '/Users/martin/Dropbox/projects/microprojects/paula/test.maf'
-        parser = ps.Maf(dro_maf, main_genome='dm6', genomes=dro_genomes)
-        parser.get_alignments()
-        len_dm6 = len(parser.align_dict['chr2L_+']['dm6'])
-        for dro_genome in dro_genomes:
-            self.assertEquals(len_dm6, len(parser.align_dict['chr2L_+'][dro_genome]))
+        with um.patch('parsers.open', um.mock_open(read_data=self.maf_block), create=True) as m:
+            parser = ps.Maf('', main_genome='dm6', genomes=self.dro_genomes, test=True)
+            parser.get_alignments()
+            len_dm6 = len(parser.align_dict['chr2L_+']['dm6'])
+            for dro_genome in self.dro_genomes:
+                self.assertEquals(len_dm6, len(parser.align_dict['chr2L_+'][dro_genome]))
 
     def test_get_region(self):
-        dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
-                                           'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
-        dro_maf = '/Users/martin/Dropbox/projects/microprojects/paula/test.maf'
-        parser = ps.Maf(dro_maf, main_genome='dm6', genomes=dro_genomes)
-        parser.get_alignments()
-        (start, stop) = (443, 462)
-        region = parser.get_region('chr2L_+', start, stop)
-        len_region = stop - start + 1
-        len_dm6 = len(region['dm6'])
-        for k,i in region.items():
-            self.assertEquals(len_dm6, len(i))
-            while ['-', 'NA'] in i:
-                i.remove(['-', 'NA'])
-            self.assertEquals(len_region, len(i))
+        with um.patch('parsers.open', um.mock_open(read_data=self.maf_block), create=True) as m:
+            parser = ps.Maf('', main_genome='dm6', genomes=self.dro_genomes, test=True)
+            parser.get_alignments()
+            (start, stop) = (443, 462)
+            region = parser.get_region('chr2L_+', start, stop)
+            len_region = stop - start + 1
+            len_dm6 = len(region['dm6'])
+            for k,i in region.items():
+                self.assertEquals(len_dm6, len(i))
+                while ['-', 'NA'] in i:
+                    i.remove(['-', 'NA'])
+                self.assertEquals(len_region, len(i))
 
 if __name__ == '__main__':
     ut.main()

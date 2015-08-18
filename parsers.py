@@ -436,7 +436,7 @@ class Maf:
     """utility functions to parse maf"""
 
     def __init__(self, maf_file, main_genome, genomes=[], test=False):
-        if not test:                            # 0 based!!!
+        if not test:
             assert isinstance(maf_file, str)
             assert os.path.isfile(maf_file)
         self.maf_file = maf_file
