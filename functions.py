@@ -198,6 +198,72 @@ class TransExons():
         np_arr = np.sort(np_arr, order=['chr', 'start'])
         return np.sort(np_arr, order=['chr', 'start'])
 
+class Fold():
+    """manages and computes features of RNA secondary structures"""
+
+    def __init__(self, fold, seq=''):
+        assert fold.count('(') == fold.count(')')
+        self.fold = fold
+        self.len = len(fold)
+        self.seq = seq.upper()
+
+    def has2_Aprime_twist(self):
+        assert self.seq
+        n_Aprime = self._get_Aprimes()
+        if len(n_Aprime) > 1:
+            return True
+        return False
+
+    def _get_Aprimes(self):
+        (n_Aprime, lenAG) = [], 0
+        for pos in range(0,self.len):
+            if self._is_match(pos) and self.seq[pos] in ['A', 'G']:
+                lenAG = self._checkTG(lenAG, pos)
+            else:
+                lenAG = 0
+            if lenAG == 3:
+                n_Aprime.append(pos - 2)
+        return n_Aprime
+
+    def _is_match(self, pos, match_type='', fold=''):
+        if not fold:
+            fold = self.fold
+        if not match_type:
+            match_type = '()'
+        if 0 <= pos < self.len:
+            if fold[pos] in match_type:
+                return True
+        return False
+
+    def _checkTG(self, lenAG, pos):
+        if lenAG == 0:
+            return 1
+        fold = self.fold
+        if self.fold[pos] == ')':
+            (pos, fold) = self._reverse(pos)
+        pair_pos = self._get_pair_pos(pos, fold)
+        if self._is_match(pair_pos + 1, ')', fold):
+            return lenAG + 1
+        return 1
+
+    def _reverse(self, pos):
+        return (self.len - pos - 1, self.fold[::-1])
+
+    def _get_pair_pos(self, pos, fold=''):
+        """it only works for first match '('
+        for second matches ')', make a reverse of
+        pos, fold and also returned value
+        """
+        if not fold:
+            fold = self.fold
+        substr = self.fold[0:pos]
+        n_match = substr.count('(')
+        (pair_pos, opp_count) = self.len - 1, 0
+        while opp_count < n_match + 1:
+            if fold[pair_pos] == ')':
+                opp_count += 1
+            pair_pos -= 1
+        return pair_pos
 
 class Random():
 

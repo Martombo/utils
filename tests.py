@@ -149,13 +149,13 @@ class TestRnafold(ut.TestCase):
     handler = hn.RnaFold()
     rnaPLfolder = handler.PlFold()
     rnaLfolder = handler.Lfold()
-    seq = ''.join([x*10 for x in ['N', 'A', 'N', 'T', 'N']])
+    seq = ''.join([x*15 for x in ['N', 'A', 'N', 'T', 'N']])
 
     def test_compute(self):
         output = self.rnaPLfolder.compute(self.seq)
         os.remove('plfold_basepairs')
         self.assertGreater(sum(output), 1)
-        self.assertEquals(len(output), 50)
+        self.assertEquals(len(output), len(self.seq))
 
     def test_trans_fold(self):
         trans = 'trans1'
@@ -164,7 +164,7 @@ class TestRnafold(ut.TestCase):
         self.assertIn(trans, output)
         self.assertEquals(1, len(output))
         self.assertGreater(sum(output[trans]), 1)
-        self.assertEquals(len(output[trans]), 50)
+        self.assertEquals(len(output[trans]), len(self.seq))
 
     def test_Lfold(self):
         seq = 'AAAACAAAAATCGATTTTTTGTTTTT'
@@ -178,7 +178,7 @@ class TestRnafold(ut.TestCase):
         self.assertIsNotNone(defold)
 
     def test_Lfold_2seqs(self):
-        seq = 'CCCCAAAAAAGGGGGGTTTTTTN'
+        seq = 'CCCCCCAAAAAAAAAGGGGGGGGTTTTTTTT'
         output = self.rnaLfolder.compute(seq)
         self.assertEquals(2, len(output['fold']))
 
@@ -408,7 +408,7 @@ class TestMaf(ut.TestCase):
     header = '##maf version=1 scoring=blastz\n'
     score = 'a score=1\n'
     align1 = 's dm6.chr2L        10 4 + 2 ACCG'
-    maf_block = 's dm6.chr2L        442 268 + 23513712 AACCGCAAACCCAA---atcgacaatgcacgaca\n'
+    maf_block = 's dm6.chr2L        441 268 + 23513712 AACCGCAAACCCAA---atcgacaatgcacgaca\n'
     maf_block +='s droSec1.super_14  39 262 +  2068291 AACCGCAAACCCGACCGAAtgccaatactcgaca\n'
 
     def test_parse_line_header(self):
@@ -444,8 +444,8 @@ class TestMaf(ut.TestCase):
             region = parser.get_region(start, stop, '+')
             len_region = stop - start + 1
             dm6 = region['dm6']
-            self.assertEquals('ACCGCAAACCCAA---atcgaca', dm6)
-            self.assertEquals('ACCGCAAACCCGACCGAAtgcca', region['droSec1'])
+            self.assertEquals('ACCGCAAACCCAA---ATCGACA', dm6)
+            self.assertEquals('ACCGCAAACCCGACCGAATGCCA', region['droSec1'])
             self.assertGreaterEqual(len(dm6), len_region)
             for k,i in region.items():
                 self.assertEquals(len(dm6), len(i))
@@ -493,6 +493,26 @@ class TransExons(ut.TestCase):
         rel_pos = te_manager.rel_pos_trans('t1',pos)
         self.assertEquals(rel_pos, [150])
 
+class TestFolds(ut.TestCase):
+
+    def test_count1_Aprime(self):
+        fold = '.(((...))).'
+        seq =  'NAAANNNTTTN'
+        folder = fn.Fold(fold, seq)
+        self.assertEquals(1, len(folder._get_Aprimes()))
+
+    def test_count2_Aprimes(self):
+        fold = '.(((.(((...))).))).'
+        seq =  'NAAANGGGNNNCCCNTTTN'
+        folder = fn.Fold(fold, seq)
+        self.assertEquals(2, len(folder._get_Aprimes()))
+        self.assertTrue(folder.has2_Aprime_twist())
+
+    def test_count1_Aprime_long(self):
+        fold = '.((((((...)))))).'
+        seq =  'NAAAGGGNNNCCCTTTN'
+        folder = fn.Fold(fold, seq)
+        self.assertEquals(1, len(folder._get_Aprimes()))
 
 if __name__ == '__main__':
     ut.main()

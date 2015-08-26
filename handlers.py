@@ -20,7 +20,7 @@ class RnaFold:
         self.msg('total transcripts: ' + str(len(trans_seqs)))
         for trans, seq in trans_seqs.items():
             plfold = self.PlFold()
-            trans_folds[trans] = plfold.compute(seq, wind_size)
+            trans_folds[trans] = plfold.compute(seq)
             k += 1
             if k % 1000 == 0:
                 self.msg('folded ' + str(k) + ' transcripts')
@@ -28,15 +28,16 @@ class RnaFold:
 
     class FoldProgram:
 
-        def __init__(self, program):
+        def __init__(self, program, options=[]):
             self._set_program(program)
+            self.options = options
 
         def _set_program(self, program):
             self.program = program
 
-        def _run(self, seq, options):
+        def _run(self, seq):
             p1 = sp.Popen(['echo', seq], stdout=sp.PIPE)
-            p2 = sp.Popen([self.program] + options, stdin=p1.stdout, stdout=sp.PIPE)
+            p2 = sp.Popen([self.program] + self.options, stdin=p1.stdout, stdout=sp.PIPE)
             p1.stdout.close()
             out_err = p2.communicate()
             return out_err[0].decode()
@@ -44,19 +45,20 @@ class RnaFold:
         def _parse_output(self, output):
             return output
 
-        def compute(self, seq, options):
-            output = self._run(seq, options)
+        def compute(self, seq):
+            output = self._run(seq)
             return self._parse_output(output)
 
     class PlFold(FoldProgram):
 
-        def __init__(self):
-            super().__init__('RNAplfold')
+        def __init__(self, options=[]):
+            if '-o' not in options:
+                options.append('-o')
+            super().__init__('RNAplfold', options)
 
-        def compute(self, seq, wind_size=70):
+        def compute(self, seq):
             self.len_seq = len(seq)
-            wind_size = min(wind_size, self.len_seq)
-            return super().compute(seq, ['-W', str(wind_size), '-o'])
+            return super().compute(seq)
 
         def _parse_output(self, output):
             fold_array = [0] * self.len_seq
@@ -75,12 +77,8 @@ class RnaFold:
 
     class Lfold(FoldProgram):
 
-        def __init__(self):
-            super().__init__('RNALfold')
-
-        def compute(self, seq, temp=37, noLP=False):
-            LP = '--noLP' if noLP else ''
-            return super().compute(seq, ['-T', str(temp), LP])
+        def __init__(self, options=[]):
+            super().__init__('RNALfold', options)
 
         def _parse_output(self, output):
             fold_en_pos = []
@@ -92,4 +90,3 @@ class RnaFold:
                     fold_en_pos.append((splat[0], energy, int(splat[2])))
             dtype = [('fold', 'U200'), ('energy', float), ('pos', int)]
             return np.array(fold_en_pos, dtype)
-

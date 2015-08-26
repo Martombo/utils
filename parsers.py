@@ -426,7 +426,9 @@ class Bed:
         return dict(chr=splat[0], start=int(splat[1]), stop=int(splat[2]), first=first)
 
 class Maf:
-    """utility functions to parse maf"""
+    """utility functions to parse maf
+    ... it appears to be 0 based ...
+    """
 
     def __init__(self, maf_file, main_genome, genomes, test=False):
         if not test:
@@ -454,9 +456,10 @@ class Maf:
         k = 0
         pos = self.align_dict['pos'][k]
         genome_align = {x:[] for x in [self.main_genome] + self.genomes}
+        start = start - 1
         while pos < start:
             (k, pos) = self._advance_pos(k, pos)
-        while pos <= stop:
+        while pos < stop:
             for genome_i in [self.main_genome] + self.genomes:
                 genome_align[genome_i].append(self.align_dict[genome_i][k-1])
             (k, pos) = self._advance_pos(k, pos)
@@ -464,7 +467,7 @@ class Maf:
 
     def _list2seq(self, genome_align):
         for llave, lista in genome_align.items():
-            genome_align[llave] = ''.join(lista)
+            genome_align[llave] = ''.join(lista).upper()
         return genome_align
 
     def _rev_comp(self, genome_align):
@@ -510,7 +513,6 @@ class Maf:
             self.align_dict['pos'].append(pos)
             pos += 1
         return pos
-
 
     def _fill_missing(self):
         ref_len = len(self.align_dict[self.main_genome])
