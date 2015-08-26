@@ -17,10 +17,10 @@ class TestFasta(ut.TestCase):
 GAATTAATAAATAAAAATGTTCTTGAAAGACAGAAATTAATATGCAGTTCATACTGTCAGAATTGCAGGCAATTTATCAAAGTCCCCT'
 
     def test_comp_rev(self):
-        self.assertEquals('CCAAGGTT', self.parser.comp_rev('AACCTTGG'))
+        self.assertEquals('CCAAGGTT', fn.comp_rev('AACCTTGG'))
 
     def test_comp_rev_low(self):
-        self.assertEquals('CAGTCAGT', self.parser.comp_rev('actgactg'))
+        self.assertEquals('CAGTCAGT', fn.comp_rev('actgactg'))
 
     def test_fasta2seq(self):
         fasta = '\n'.join(['>header', self.seq0])
@@ -34,7 +34,7 @@ GAATTAATAAATAAAAATGTTCTTGAAAGACAGAAATTAATATGCAGTTCATACTGTCAGAATTGCAGGCAATTTATCAA
         self.assertEquals(self.seq1, self.parser.get_fasta(self.pos1, '+'))
 
     def test_get_fasta_strand(self):
-        self.assertEquals(self.parser.comp_rev(self.seq1), self.parser.get_fasta(self.pos1, '-'))
+        self.assertEquals(fn.comp_rev(self.seq1), self.parser.get_fasta(self.pos1, '-'))
 
     def test_trans_seq(self):
         if os.path.isdir('/Users/martin'):
@@ -44,7 +44,7 @@ GAATTAATAAATAAAAATGTTCTTGAAAGACAGAAATTAATATGCAGTTCATACTGTCAGAATTGCAGGCAATTTATCAA
     def test_trans_seq_strand(self):
         if os.path.isdir('/Users/martin'):
             seq_out = self.parser.get_trans_seqs(self.trans_exons_strand)
-            self.assertEquals(self.parser.comp_rev(self.seq_exp), seq_out['trans123'])
+            self.assertEquals(fn.comp_rev(self.seq_exp), seq_out['trans123'])
 
 
 class TestBed(ut.TestCase):
@@ -136,9 +136,10 @@ gene_biotype "transcribed_unprocessed_pseudogene"; transcript_id "ENST0000024985
 
     def test_np_exon(self):
         with um.patch('parsers.open', um.mock_open(read_data=self.mocking), create=True) as m:
-            trans = 'ENST00000249857'
             trans_exons = self.parser.get_trans_exon()
-            np_exons = self.parser.trans_exon2np(trans_exons)
+            trans_exoner = fn.TransExons(trans_exons)
+            np_exons = trans_exoner.trans_exon2np()
+            self.assertIn(20394, np_exons['start'])
 
 
 class TestRnafold(ut.TestCase):
@@ -401,14 +402,14 @@ class TestBam(ut.TestCase):
 
 
 class TestMaf(ut.TestCase):
-    parser = ps.Maf('prova.maf', main_genome='dm6', test=True)
+    dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
+                                       'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
+    parser = ps.Maf('prova.maf', main_genome='dm6', genomes=dro_genomes, test=True)
     header = '##maf version=1 scoring=blastz\n'
     score = 'a score=1\n'
     align1 = 's dm6.chr2L        10 4 + 2 ACCG'
-    maf_block = 's dm6.chr2L        443 268 + 23513712 ACCGCAAACCCAA-atcgacaatgcacgaca\n'
-    maf_block +='s droSec1.super_14  39 262 +  2068291 ACCGCAAACCCGAGAAtgccaatactcgaca\n'
-    dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
-                                       'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
+    maf_block = 's dm6.chr2L        442 268 + 23513712 AACCGCAAACCCAA---atcgacaatgcacgaca\n'
+    maf_block +='s droSec1.super_14  39 262 +  2068291 AACCGCAAACCCGACCGAAtgccaatactcgaca\n'
 
     def test_parse_line_header(self):
         parsed = self.parser._parse_line(self.header)
@@ -431,23 +432,67 @@ class TestMaf(ut.TestCase):
         with um.patch('parsers.open', um.mock_open(read_data=self.maf_block), create=True) as m:
             parser = ps.Maf('', main_genome='dm6', genomes=self.dro_genomes, test=True)
             parser.get_alignments()
-            len_dm6 = len(parser.align_dict['chr2L_+']['dm6'])
+            len_dm6 = len(parser.align_dict['dm6'])
             for dro_genome in self.dro_genomes:
-                self.assertEquals(len_dm6, len(parser.align_dict['chr2L_+'][dro_genome]))
+                self.assertEquals(len_dm6, len(parser.align_dict[dro_genome]))
 
     def test_get_region(self):
         with um.patch('parsers.open', um.mock_open(read_data=self.maf_block), create=True) as m:
             parser = ps.Maf('', main_genome='dm6', genomes=self.dro_genomes, test=True)
             parser.get_alignments()
             (start, stop) = (443, 462)
-            region = parser.get_region('chr2L_+', start, stop)
+            region = parser.get_region(start, stop, '+')
             len_region = stop - start + 1
-            len_dm6 = len(region['dm6'])
+            dm6 = region['dm6']
+            self.assertEquals('ACCGCAAACCCAA---atcgaca', dm6)
+            self.assertEquals('ACCGCAAACCCGACCGAAtgcca', region['droSec1'])
+            self.assertGreaterEqual(len(dm6), len_region)
             for k,i in region.items():
-                self.assertEquals(len_dm6, len(i))
-                while ['-', 'NA'] in i:
-                    i.remove(['-', 'NA'])
-                self.assertEquals(len_region, len(i))
+                self.assertEquals(len(dm6), len(i))
+            dm6 = dm6.replace('-', '')
+            self.assertEquals(len_region, len(dm6))
+
+    def test_get_rev_region(self):
+        with um.patch('parsers.open', um.mock_open(read_data=self.maf_block), create=True) as m:
+            parser = ps.Maf('', main_genome='dm6', genomes=self.dro_genomes, test=True)
+            parser.get_alignments()
+            (start, stop) = (443, 462)
+            region = parser.get_region(start, stop, '-')
+            self.assertEquals('TGTCGAT---TTGGGTTTGCGGT', region['dm6'])
+            self.assertEquals('TGGCATTCGGTCGGGTTTGCGGT', region['droSec1'])
+
+
+
+class TransExons(ut.TestCase):
+
+    def test_rel_pos_trans(self):
+        trans_exon = {'trans1':[['chr1',100,200,'+']]}
+        pos = [150]
+        te_manager = fn.TransExons(trans_exon)
+        rel_pos = te_manager.rel_pos_trans('trans1',pos)
+        self.assertEquals(rel_pos, [50])
+
+    def test_rev_rel_pos(self):
+        trans_exon = {'trans1':[['chr1',100,200,'-']]}
+        pos = [180]
+        te_manager = fn.TransExons(trans_exon)
+        rel_pos = te_manager.rel_pos_trans('trans1',pos)
+        self.assertEquals(rel_pos, [20])
+
+    def test_2exons_rel_pos(self):
+        trans_exon = {'t1':[['1',100,199,'+'],['1',400,500,'+']]}
+        pos = [450]
+        te_manager = fn.TransExons(trans_exon)
+        rel_pos = te_manager.rel_pos_trans('t1',pos)
+        self.assertEquals(rel_pos, [150])
+
+    def test_2exons_rev_pos(self):
+        trans_exon = {'t1':[['1',401,500,'-'],['1',100,200,'-']]}
+        pos = [150]
+        te_manager = fn.TransExons(trans_exon)
+        rel_pos = te_manager.rel_pos_trans('t1',pos)
+        self.assertEquals(rel_pos, [150])
+
 
 if __name__ == '__main__':
     ut.main()

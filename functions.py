@@ -1,3 +1,5 @@
+import numpy as np
+
 class Intersecter:
 
     def __init__(self, sites, regions, counter, strand=True, over_check=10):
@@ -142,9 +144,64 @@ class Intersecter:
                     i += 1
 
 
+class TransExons():
+    """
+    manages a trans_exons dictionary (see parsers.Gtf)
+    {'ENST000024631: [['chr1', 12623, 13486, '+'], [...]]}
+    """
+    def __init__(self, trans_exons):
+        self.trans_exons = trans_exons
+        self.check_start = None
+
+    def rel_pos_trans(self, trans, poss):
+        """finds relative position on trans (0 based) of a chromosomal location
+        poss must be reverse sorted if trans is on - strand
+        :param trans: trans id 'ENSG0000005007'
+        :param poss: list sorted by position on gene [1209345, 1259054]
+        :return: relative positions [0, 193, 5001]
+        """
+        k = 0
+        rel_poss = []
+        trans_exon = self.trans_exons[trans]
+        strand = trans_exon[0][3]
+        for exon in trans_exon:
+            self._check_exon(exon,strand)
+            for base in range(exon[1], exon[2] + 1)[::int(strand + '1')]:
+                for pos in poss:
+                    if base == pos:
+                        rel_poss.append(k)
+                k += 1
+        self.check_start = None
+        return rel_poss
+
+    def _check_exon(self,exon,strand):
+        if self.check_start:
+            if strand == '+':
+                assert exon[1] > self.check_start
+            else:
+                assert exon[1] < self.check_start
+        self.check_start = exon[1]
+
+    def trans_exon2np(self):
+        """converts trans_exon to numpy array
+        which is sorted by position (chr, start)
+        :param trans_exon: {'ENST000024631: [['chr1', '12623', '13486', '+'], [...]]}
+        :returns np.array: chr,start,stop,strand,trans
+        """
+        arr = []
+        for trans, exons in self.trans_exons.items():
+            for exon in exons:
+                exon.append(trans)
+                arr.append(tuple(exon))
+        dtype = [('chr', 'U15'), ('start', int), ('stop', int), ('strand', 'U1'), ('trans', 'U15')]
+        np_arr = np.array(arr, dtype)
+        np_arr = np.sort(np_arr, order=['chr', 'start'])
+        return np.sort(np_arr, order=['chr', 'start'])
+
+
 class Random():
 
-    def random_seq(leng):
+    def random_seq(self, leng):
         "returns a random nucleotide sequence of the desired length"
         import random as rn
 
@@ -170,3 +227,14 @@ def add2dict(dict, key, value):
     else:
         dict[key] = [value]
     return dict
+
+def comp_rev(seq):
+    """complementary reverse of a sequence (only ACTGN)"""
+    seq = seq.lower()
+    seq = seq[::-1]
+    seq = seq.replace('a', 'T')
+    seq = seq.replace('t', 'A')
+    seq = seq.replace('c', 'G')
+    seq = seq.replace('g', 'C')
+    seq = seq.replace('n', 'N')
+    return seq

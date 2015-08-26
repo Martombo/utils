@@ -8,7 +8,7 @@ class RnaFold:
         if msg:
             self.msg = msg
         else:
-            self.msg = lambda x: print(x)
+            self.msg = lambda x: None
 
     def trans_plfolds(self, trans_seqs, wind_size=70):
         """determines plfold scores of trans_seq

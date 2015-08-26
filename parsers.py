@@ -248,14 +248,15 @@ class Gtf:
             assert os.path.isfile(gtf_file)
         self.gtf_path = gtf_file
 
-    def get_trans_exon(self):
+    def get_trans_exon(self, feature='exon', annot='havana'):
         """gets transcript exons coordinates
         gtf must be sorted by transcript exons number
-        :returns {'ENST000024631: [['chr1', '12623', '13486', '+'], [...]]}
+        first exon is first also for reverse strand
+        :returns {'ENST000024631: [['chr1', 12623, 13486, '+'], [...]]}
         """
         trans_exons = {}
         for linea in open(self.gtf_path).readlines():
-            dic = self._parse_line(linea, feature='exon', annot='havana')
+            dic = self._parse_line(linea, feature=feature, annot=annot)
             if not dic:
                 continue
             chr_pos = [dic['chr'], dic['start'], dic['stop'], dic['strand']]
@@ -302,23 +303,16 @@ class Gtf:
             attr_dic[attr_key] = attr_item
         return attr_dic
 
-    def trans_exon2np(self, trans_exon):
-        """converts trans_exon (see self.get_trans_exon()) to numpy array
-        which is sorted by position (chr, start)
-        :param trans_exon: {'ENST000024631: [['chr1', '12623', '13486', '+'], [...]]}
-        :returns np.array: chr,start,stop,strand,trans
-        """
-        if not trans_exon:
-            trans_exon = self.get_trans_exon()
-        arr = []
-        for trans, exons in trans_exon.items():
-            for exon in exons:
-                exon.append(trans)
-                arr.append(tuple(exon))
-        dtype = [('chr', 'U15'), ('start', int), ('stop', int), ('strand', 'U1'), ('trans', 'U15')]
-        np_arr = np.array(arr, dtype)
-        np_arr = np.sort(np_arr, order=['chr', 'start'])
-        return np.sort(np_arr, order=['chr', 'start'])
+    def get_start_stop_codons(self, annot='havana'):
+        """gets start and stop codons position
+        start codon is always first"""
+        trans_start_stop = {}
+        for linea in open(self.gtf_path).readlines():
+            dic = self._parse_line(linea, feature='start_codon|stop_codon', annot=annot)
+            if not dic:
+                continue
+            trans_start_stop = fn.add2dict(trans_start_stop, dic['attr']['transcript_id'], [dic['start'], dic['stop']])
+        return trans_start_stop
 
 class Fasta:
     """utility functions to parse fasta"""
@@ -347,15 +341,13 @@ class Fasta:
         return trans_seqs
 
     def get_fasta(self, chr_pos, strand):
-        """finds the sequence of a genomic interval '1:387941-388099', '+'
-        must have fasta
-        """
+        """finds the sequence of a genomic interval '1:387941-388099', '+' """
         assert self._has_fasta()
         samtools_cmm = ['samtools', 'faidx', self.fasta_file, chr_pos]
         samtools_out = sp.check_output(samtools_cmm).decode()
         seq = self.fasta2seq(samtools_out)
         if strand == '-':
-            seq = self.comp_rev(seq)
+            seq = fn.comp_rev(seq)
         return seq.upper()
 
     def fasta2seq(self, fasta):
@@ -363,17 +355,6 @@ class Fasta:
         assert fasta.startswith('>')
         samtools_splat = fasta.split('\n')
         return ''.join(samtools_splat[1:])
-
-    def comp_rev(self, seq):
-        """complementary reverse of a sequence (only ACTGN)"""
-        seq = seq.lower()
-        seq = seq[::-1]
-        seq = seq.replace('a', 'T')
-        seq = seq.replace('t', 'A')
-        seq = seq.replace('c', 'G')
-        seq = seq.replace('g', 'C')
-        seq = seq.replace('n', 'N')
-        return seq
 
     def _has_fasta(self):
         return len(self.fasta_file) > 0
@@ -398,6 +379,18 @@ class Bed:
             dic = self._parse_tophat(linea)
             if dic:
                 chr_pos_score.append((dic['chr'], dic['first'], dic['strand'], dic['score']))
+        return np.array(chr_pos_score, dtype)
+
+    def get_intervals(self):
+        """get 1-based start (gtf-like) and score of bed intervals
+        :returns np.array: chr,pos,strand,score
+        """
+        chr_pos_score = []
+        dtype = [('chr', 'U15'), ('start', int), ('stop', int), ('strand', 'U1')]
+        for linea in open(self.bed_path).readlines():
+            dic = self._parse_line6(linea)
+            if dic:
+                chr_pos_score.append((dic['chr'], dic['start'], dic['stop'], dic['strand']))
         return np.array(chr_pos_score, dtype)
 
     def _parse_tophat(self, linea):
@@ -435,7 +428,7 @@ class Bed:
 class Maf:
     """utility functions to parse maf"""
 
-    def __init__(self, maf_file, main_genome, genomes=[], test=False):
+    def __init__(self, maf_file, main_genome, genomes, test=False):
         if not test:
             assert isinstance(maf_file, str)
             assert os.path.isfile(maf_file)
@@ -443,32 +436,53 @@ class Maf:
         self.align_dict = {}
         self.main_genome = main_genome
         self.genomes = genomes
+        for genome in [main_genome, 'pos'] + genomes:
+            self.align_dict[genome] = []
 
-    def get_region(self, chr_strand, start, stop):
-        self.chr_strand = chr_strand
+    def get_region(self, start, stop, strand='+'):
+        """returns a dict of seqs of a region of the alignment
+        the interval is a closed one
+        :returns genome_align: {'dm6': 'ACTGTAA---GCTAG'}
+        """
+        genome_align = self._scroll_region(start, stop)
+        genome_align = self._list2seq(genome_align)
+        if strand == '-':
+            genome_align = self._rev_comp(genome_align)
+        return genome_align
+
+    def _scroll_region(self, start, stop):
         k = 0
-        pos = self.align_dict[self.chr_strand][self.main_genome][k][1]
+        pos = self.align_dict['pos'][k]
         genome_align = {x:[] for x in [self.main_genome] + self.genomes}
         while pos < start:
             (k, pos) = self._advance_pos(k, pos)
-        while pos < stop:
+        while pos <= stop:
             for genome_i in [self.main_genome] + self.genomes:
-                genome_align[genome_i].append(self.align_dict[self.chr_strand][self.main_genome][k])
-                if genome_i == self.main_genome:
-                    (k, pos) = self._advance_pos(k, pos)
+                genome_align[genome_i].append(self.align_dict[genome_i][k-1])
+            (k, pos) = self._advance_pos(k, pos)
+        return genome_align
+
+    def _list2seq(self, genome_align):
+        for llave, lista in genome_align.items():
+            genome_align[llave] = ''.join(lista)
+        return genome_align
+
+    def _rev_comp(self, genome_align):
+        for llave, seq in genome_align.items():
+            genome_align[llave] = fn.comp_rev(seq)
         return genome_align
 
     def _advance_pos(self, index, pos):
-        pos_or_NA = self.align_dict[self.chr_strand][self.main_genome][index][1]
+        pos_or_NA = self.align_dict['pos'][index]
         if pos_or_NA != 'NA':
             pos = pos_or_NA
         index += 1
         return (index, pos)
 
     def get_alignments(self):
-        """stores in align_dict the whole MAF file
-        align_dict has keys: chr_strand (eg: 'chr1_+')
-        which is a dict, with keys: genome (eg: 'dm6')
+        """stores in align_dict all MAF data of specified genomes
+        only one chrom of main_genome must be present
+        align_dict is a dict, with genome keys: (eg: 'dm6', 'droSec1')
         which has a list: [['A', 1732], ['-', 'NA'], ['C', 1733], ...]
         careful for memory usage!
         """
@@ -482,35 +496,27 @@ class Maf:
 
     def _add2dic(self, line):
         if line['genome'] == self.main_genome:
-            self.chr_strand = '_'.join([line['chr'], line['strand']])
             self._fill_missing()
         pos = line['start']
-        self._check_dict_with(self.chr_strand, line['genome'])
         for k in line['seq']:
-            if k == '-':
-                self.align_dict[self.chr_strand][line['genome']].append([k, 'NA'])
-            else:
-                self.align_dict[self.chr_strand][line['genome']].append([k, pos])
-                pos += 1
+            self.align_dict[line['genome']].append(k)
+            if line['genome'] == self.main_genome:
+                pos = self._add_pos2dic(pos, k)
+
+    def _add_pos2dic(self, pos, k):
+        if k == '-':
+            self.align_dict['pos'].append('NA')
+        else:
+            self.align_dict['pos'].append(pos)
+            pos += 1
+        return pos
+
 
     def _fill_missing(self):
-        if self._check_dict_with(self.chr_strand, self.main_genome):
-            ref_len = len(self.align_dict[self.chr_strand][self.main_genome])
-            for genome in self.genomes:
-                self._check_dict_with(self.chr_strand, genome)
-                while len(self.align_dict[self.chr_strand][genome]) < ref_len:
-                    self.align_dict[self.chr_strand][genome].append(['-','NA'])
-
-
-    def _check_dict_with(self, chr_strand, genome):
-        already_in = True
-        if chr_strand not in self.align_dict:
-            self.align_dict[chr_strand] = {}
-            already_in = False
-        if genome not in self.align_dict[chr_strand]:
-            self.align_dict[chr_strand][genome] = []
-            already_in = False
-        return already_in
+        ref_len = len(self.align_dict[self.main_genome])
+        for genome in self.genomes:
+            while len(self.align_dict[genome]) < ref_len:
+                self.align_dict[genome].append('-')
 
     def _parse_line(self, line):
         splat = [x for x in line.rstrip('\n').split(' ') if x]
