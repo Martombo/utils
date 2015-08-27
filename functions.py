@@ -1,4 +1,5 @@
 import numpy as np
+import subprocess as sp
 
 class Intersecter:
 
@@ -207,16 +208,27 @@ class Fold():
         self.len = len(fold)
         self.seq = seq.upper()
 
-    def has2_Aprime_twist(self):
+    def plot(self):
         assert self.seq
-        n_Aprime = self._get_Aprimes()
-        if len(n_Aprime) > 1:
-            return True
-        return False
+        seq_fold = '\n'.join(['>' + self.seq[0:15], self.seq, self.fold, ''])
+        p1 = sp.Popen(['echo', seq_fold], stdout=sp.PIPE)
+        p2 = sp.Popen('RNAplot', stdin=p1.stdout, stdout=sp.PIPE)
+        p1.stdout.close()
+        p2.communicate()
 
-    def _get_Aprimes(self):
+    def is_simple(self):
+        closing = False
+        for f in self.fold:
+            if f == ')':
+                closing = True
+            elif closing and f == '(':
+                return False
+        return True
+
+    def get_Aprimes(self):
+        assert self.seq
         (n_Aprime, lenAG) = [], 0
-        for pos in range(0,self.len):
+        for pos in range(self.len):
             if self._is_match(pos) and self.seq[pos] in ['A', 'G']:
                 lenAG = self._checkTG(lenAG, pos)
             else:
@@ -264,6 +276,52 @@ class Fold():
                 opp_count += 1
             pair_pos -= 1
         return pair_pos
+
+
+class GappedSeq():
+
+    def get_gapped_i(self, gapped_seq, pos, leng):
+        """pos and leng are indexes of an ungapped subsequence of gapped_seq
+        :returns the start and stop of the subsequence in gapped_seq
+        """
+        (ungapped_k, start, stop) = -1, 0, 0
+        for k in range(len(gapped_seq)):
+            if gapped_seq[k] != '-':
+                ungapped_k += 1
+            if ungapped_k == pos and not start:
+                start = k
+            elif ungapped_k == pos + leng and not stop:
+                stop = k
+            if start and stop:
+                return start, stop
+
+    def get_gaps(self, seq_gap, seq):
+        """inserts gaps from seq_gap to seq"""
+        seq_out = ''
+        for k in range(len(seq_gap)):
+            if seq_gap[k] != '-':
+                seq_out += seq[0]
+                seq = seq[1:]
+            else:
+                seq_out += '.'
+        assert len(seq_out) == len(seq_gap)
+        return seq_out
+
+    def get_ortho_constr(self, seqA, foldA, seqB):
+        """seqA and seqB are two aligned sequences
+        foldA is the ungapped folding of seqA
+        :returns constraints for seqB, given fold of seqA"""
+        assert len(seqA) == len(seqB)
+        foldA_gap = self.get_gaps(seqA, foldA)
+        foldA_gap = foldA_gap.replace('(', '<').replace(')', '>')
+        foldB_out = ''
+        for k in range(len(seqA)):
+            if seqB[k] != '-':
+                foldB_out += foldA_gap[k]
+        seqB_out = seqB.replace('-','')
+        assert len(seqB_out) == len(foldB_out)
+        return seqB_out, foldB_out
+
 
 class Random():
 

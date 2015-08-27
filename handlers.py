@@ -49,6 +49,21 @@ class RnaFold:
             output = self._run(seq)
             return self._parse_output(output)
 
+    class CostraintFold(FoldProgram):
+
+        def __init__(self, options=[]):
+            for add_on in ['-C', '--noPS']:
+                if add_on not in options:
+                    options.append(add_on)
+            super().__init__('RNAfold', options)
+
+        def _parse_output(self, output):
+            line2_splat = output.split('\n')[1].split(' ')
+            fold = line2_splat[0]
+            score_str = ''.join(line2_splat[1:])
+            score_str = score_str.replace('(','').replace(')','')
+            return (fold, float(score_str))
+
     class PlFold(FoldProgram):
 
         def __init__(self, options=[]):

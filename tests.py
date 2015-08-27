@@ -149,6 +149,7 @@ class TestRnafold(ut.TestCase):
     handler = hn.RnaFold()
     rnaPLfolder = handler.PlFold()
     rnaLfolder = handler.Lfold()
+    constFolder = handler.CostraintFold()
     seq = ''.join([x*15 for x in ['N', 'A', 'N', 'T', 'N']])
 
     def test_compute(self):
@@ -181,6 +182,25 @@ class TestRnafold(ut.TestCase):
         seq = 'CCCCCCAAAAAAAAAGGGGGGGGTTTTTTTT'
         output = self.rnaLfolder.compute(seq)
         self.assertEquals(2, len(output['fold']))
+
+    def test_const_fold(self):
+        seq = 'CCCAAAAACCCCCTTTTTCCC'
+        const = '...<<<<<.....>>>>>...'
+        (fold, score) = self.constFolder.compute(seq+'\n'+const)
+        self.assertLessEqual(score, 0)
+        self.assertEqual(len(seq), len(fold))
+        self.assertIn('.', fold)
+
+    def test_const_fold_hairp(self):
+        seq = 'CCCAAAAAAAACCCCCTTTTTTTTCCC'
+        const = '...<<<<<<<<.....>>>>>>>>...'
+        (fold, score) = self.constFolder.compute(seq+'\n'+const)
+        self.assertLessEqual(score, -0.1)
+        self.assertEqual(len(seq), len(fold))
+        self.assertIn('(', fold)
+        self.assertIn(')', fold)
+        self.assertIn('.', fold)
+        self.assertEqual(fold.count('('), fold.count(')'))
 
 
 class TestIntersecter(ut.TestCase):
@@ -499,20 +519,19 @@ class TestFolds(ut.TestCase):
         fold = '.(((...))).'
         seq =  'NAAANNNTTTN'
         folder = fn.Fold(fold, seq)
-        self.assertEquals(1, len(folder._get_Aprimes()))
+        self.assertEquals(1, len(folder.get_Aprimes()))
 
     def test_count2_Aprimes(self):
         fold = '.(((.(((...))).))).'
         seq =  'NAAANGGGNNNCCCNTTTN'
         folder = fn.Fold(fold, seq)
-        self.assertEquals(2, len(folder._get_Aprimes()))
-        self.assertTrue(folder.has2_Aprime_twist())
+        self.assertEquals(2, len(folder.get_Aprimes()))
 
     def test_count1_Aprime_long(self):
         fold = '.((((((...)))))).'
         seq =  'NAAAGGGNNNCCCTTTN'
         folder = fn.Fold(fold, seq)
-        self.assertEquals(1, len(folder._get_Aprimes()))
+        self.assertEquals(1, len(folder.get_Aprimes()))
 
 if __name__ == '__main__':
     ut.main()
