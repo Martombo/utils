@@ -533,5 +533,101 @@ class TestFolds(ut.TestCase):
         folder = fn.Fold(fold, seq)
         self.assertEquals(1, len(folder.get_Aprimes()))
 
+    def test_count1_Aprime_porcodio(self):
+        fold = '((.(.)))'
+        seq =  'TTGCNGAA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(0, len(aPrimes))
+
+    def test_get_pair_pos(self):
+        fold = '((.(.)))'
+        seq =  'TTGCNGAA'
+        folder = fn.Fold(fold, seq)
+        pair_pos = folder._get_pair_pos(0)
+        self.assertEquals(pair_pos, 7)
+
+    def test_get_pair_pos_rev(self):
+        fold = '((.(.)))'
+        seq =  'TTGCNGAA'
+        folder = fn.Fold(fold, seq)
+        pos = 6
+        (pos, fold) = folder._reverse(pos)
+        pair_pos = folder._get_pair_pos(pos, fold)
+        self.assertEquals(len(fold) - 1 - pair_pos, 1)
+
+    def test_wg(self):
+        fold = '.((((((((((((...(((((......)))))..)))))).)))))).'
+        seq =  'ACTGCTTGCATACTGCTTTGGGCAGGACCAAAACGTATGCGAAGTGGA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(2, len(aPrimes))
+
+    def test_grk(self):
+        fold = '.((((((..((((.((((.((((((((((.......))).)))))))...))))))))..)))))).'
+        seq =  'AAAGTAATTTTCGTGCTCTCAACAATTGTCGCCGTCACAGATTGTTGTTCGAGCCGAATCTTACTTC'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(3, len(aPrimes))
+
+    def test_orb(self):
+        fold = '.((((((((((((((((((.....)))))))))))).)))))).'
+        seq =  'GGAATTTCAATTTTTAAGAAAACATTTTAAAAATTGTAAATTCG'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(4, len(aPrimes))
+
+    def test_bcd(self):
+        fold = '.((((((((.(((((((.((((((.........)))))))))..))))..)))))))).'
+        seq =  'AAAATGTTTCTCTTGGGCGTAATCTCATACAATGATTACCCTTAAAGATCGAACATTTA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(4, len(aPrimes))
+
+    def test_fushi1(self):
+        fold = '.(((((((((((...(((((((((....))))))))).)))..)))))))).'
+        seq =  'GGCGCACTCCCTACGGTGCCCAGGACATTTTGGGCACAAGGACGAGTGCGCA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(4, len(aPrimes))
+
+    def test_fushi2(self):
+        fold = '.(((((((((((((..(((((((.........))))))).......)))))..)))).)))).'
+        seq =  'GCGCACTTCTCTCGACCATTTGTAGGTGACACGCAAATGACACAGCCGAGAACGAAGCTGCGA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(3, len(aPrimes))
+
+    def test_hairy(self):
+        fold = '.(((((((((((.((((.((((....)).)).)))).))...))))))))).'
+        seq =  'AGACATTTCACATCATTCGCCGGGATTGCGCAAATGTTGCTTTGAAGTGTTG'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(2, len(aPrimes))
+
+    def test_get_pair1(self):
+        fold = '.(((...))).'
+        folder = fn.Fold(fold)
+        pair = folder._get_pair(1)
+        self.assertEquals(9, pair)
+
+    def test_get_pair2(self):
+        fold = '.(..(.(..).)).'
+        folder = fn.Fold(fold)
+        pair = folder._get_pair(4)
+        self.assertEquals(11, pair)
+
+    def test_get_pair_rev1(self):
+        fold = '.((.(...).)).'
+        folder = fn.Fold(fold)
+        pair = folder._get_pair(10)
+        self.assertEquals(2, pair)
+
+    def test_get_pair_rev2(self):
+        fold = '(.((.(...)).))'
+        folder = fn.Fold(fold)
+        pair = folder._get_pair(13)
+        self.assertEquals(0, pair)
+
 if __name__ == '__main__':
     ut.main()

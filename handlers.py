@@ -58,7 +58,10 @@ class RnaFold:
             super().__init__('RNAfold', options)
 
         def _parse_output(self, output):
-            line2_splat = output.split('\n')[1].split(' ')
+            lines = output.split('\n')
+            if len(lines) < 2:
+                return (None, None)
+            line2_splat = lines[1].split(' ')
             fold = line2_splat[0]
             score_str = ''.join(line2_splat[1:])
             score_str = score_str.replace('(','').replace(')','')

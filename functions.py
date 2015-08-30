@@ -225,14 +225,64 @@ class Fold():
                 return False
         return True
 
+    def _get_pair(self, pos):
+        assert self._is_match(pos)
+        matches = 0
+        for k in range(len(self.fold)):
+            if self._is_match(k):
+                matches += 1
+            if k == pos:
+                break
+        rev_matches = 0
+        for k in range(len(self.fold))[::-1]:
+            if self._is_match(k):
+                rev_matches += 1
+            if rev_matches == matches:
+                return k
+        assert False
+
+    def _is_symm_match(self, posA, posB):
+        pairA = self._get_pair(posA)
+        pairB = self._get_pair(posB)
+        return posA - posB == pairB - pairA
+
+    def _rescue_hairy_back(self, pos, lenAG):
+        if lenAG != 2:
+            return 0
+        if pos - 5 >= 0 and self.seq[pos - 3] in ['A', 'G']:
+            if self._is_match(pos - 4) and self._is_symm_match(pos - 4, pos - 2):
+                if self._is_match(pos - 5) and self._is_symm_match(pos - 5, pos - 4):
+                    return 3
+        return 0
+
+    def _rescue_hairy(self, pos, lenAG):
+        if lenAG != 2:
+            return 0
+        if pos + 2 < self.len and self.seq[pos] in ['A', 'G']:
+            if self._is_match(pos + 1) and self._is_symm_match(pos - 1, pos + 1):
+                if self._is_match(pos + 2) and self._is_symm_match(pos + 1, pos + 2):
+                    return 3
+        return self._rescue_hairy_back(pos, lenAG)
+
+    def _update_lenAG(self, pos, lenAG):
+        if self.seq[pos] not in ['A', 'G']:
+            return self._rescue_hairy_back(pos, lenAG)
+        if not self._is_match(pos):
+            return self._rescue_hairy(pos, lenAG)
+        if lenAG == 0:
+            return 1
+        pair = self._get_pair(pos)
+        prev_pair = self._get_pair(pos - 1)
+        if pair - prev_pair in [1, -1]:
+            return lenAG + 1
+        else:
+            return 1
+
     def get_Aprimes(self):
         assert self.seq
         (n_Aprime, lenAG) = [], 0
         for pos in range(self.len):
-            if self._is_match(pos) and self.seq[pos] in ['A', 'G']:
-                lenAG = self._checkTG(lenAG, pos)
-            else:
-                lenAG = 0
+            lenAG = self._update_lenAG(pos, lenAG)
             if lenAG == 3:
                 n_Aprime.append(pos - 2)
         return n_Aprime
@@ -247,19 +297,11 @@ class Fold():
                 return True
         return False
 
-    def _checkTG(self, lenAG, pos):
-        if lenAG == 0:
-            return 1
-        fold = self.fold
-        if self.fold[pos] == ')':
-            (pos, fold) = self._reverse(pos)
-        pair_pos = self._get_pair_pos(pos, fold)
-        if self._is_match(pair_pos + 1, ')', fold):
-            return lenAG + 1
-        return 1
-
     def _reverse(self, pos):
-        return (self.len - pos - 1, self.fold[::-1])
+        fold = self.fold.replace('(','+')
+        fold = fold.replace(')','(')
+        fold = fold.replace('+',')')
+        return (self.len - pos - 1, fold[::-1])
 
     def _get_pair_pos(self, pos, fold=''):
         """it only works for first match '('
@@ -271,7 +313,7 @@ class Fold():
         substr = self.fold[0:pos]
         n_match = substr.count('(')
         (pair_pos, opp_count) = self.len - 1, 0
-        while opp_count < n_match + 1:
+        while opp_count < n_match:
             if fold[pair_pos] == ')':
                 opp_count += 1
             pair_pos -= 1
