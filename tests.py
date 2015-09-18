@@ -7,7 +7,7 @@ import pysam
 import os
 
 class TestFasta(ut.TestCase):
-    parser = ps.Fasta('/Users/martin/Dropbox/utils/gNome/GRCh38_2.fa', test=True)
+    parser = ps.Fasta('/Users/martin/notDropbox/utils/gNome/GRCh38_2.fa', test=True)
     seq0 = 'ACTGACTG'
     seq1 = 'CGGAAGTGACCGTGGTGGCTTCAATAAATTTGGTG'
     pos1 = '16:31186802-31186836'
@@ -75,7 +75,7 @@ class TestBed(ut.TestCase):
 
 
 class TestGtf(ut.TestCase):
-    parser = ps.Gtf('/Users/martin/Dropbox/utils/genes/Homo_sapiens.GRCh38.80toy.gtf', test=True)
+    parser = ps.Gtf('/Users/martin/notDropbox/utils/genes/Homo_sapiens.GRCh38.80toy.gtf', test=True)
     attr = 'gene_id "ENSG00000223972"; gene_version "5"; gene_name "DDX11L1"; gene_source "havana"; \
 gene_biotype "transcribed_unprocessed_pseudogene"; transcript_id "ENST00000249857";'
     linea = '\t'.join(['1', 'havana', 'gene', '11869', '14409', '.', '+', '.', attr])
@@ -402,8 +402,8 @@ class TestBam(ut.TestCase):
     def test_splicer_get_sites(self):
         cigar = [[0, 10], [3, 100], [0, 10]]
         reference_start = 90
-        splicer = ps.Bam._read_splicer(cigar, reference_start)
-        sites = splicer.get_sites()
+        splicer = ps.Bam._read_reader(cigar, reference_start)
+        sites = splicer.get_splice_sites()
         self.assertEquals(1, len(sites))
         self.assertEquals(2, len(sites[0]))
         self.assertEquals(100, sites[0][0])
@@ -544,7 +544,7 @@ class TestFolds(ut.TestCase):
         fold = '((.(.)))'
         seq =  'TTGCNGAA'
         folder = fn.Fold(fold, seq)
-        pair_pos = folder._get_pair_pos(0)
+        pair_pos = folder._get_pair(0)
         self.assertEquals(pair_pos, 7)
 
     def test_get_pair_pos_rev(self):
@@ -553,7 +553,7 @@ class TestFolds(ut.TestCase):
         folder = fn.Fold(fold, seq)
         pos = 6
         (pos, fold) = folder._reverse(pos)
-        pair_pos = folder._get_pair_pos(pos, fold)
+        pair_pos = folder._get_pair(pos)
         self.assertEquals(len(fold) - 1 - pair_pos, 1)
 
     def test_wg(self):
@@ -564,11 +564,11 @@ class TestFolds(ut.TestCase):
         self.assertEquals(2, len(aPrimes))
 
     def test_grk(self):
-        fold = '.((((((..((((.((((.((((((((((.......))).)))))))...))))))))..)))))).'
-        seq =  'AAAGTAATTTTCGTGCTCTCAACAATTGTCGCCGTCACAGATTGTTGTTCGAGCCGAATCTTACTTC'
+        fold = '.((((.((((.((((((((((.......))).)))))))...))))))))'
+        seq =  'TTTCGTGCTCTCAACAATTGTCGCCGTCACAGATTGTTGTTCGAGCCGAA'
         folder = fn.Fold(fold, seq)
         aPrimes = folder.get_Aprimes()
-        self.assertEquals(3, len(aPrimes))
+        self.assertEquals(2, len(aPrimes))
 
     def test_orb(self):
         fold = '.((((((((((((((((((.....)))))))))))).)))))).'
@@ -605,6 +605,20 @@ class TestFolds(ut.TestCase):
         aPrimes = folder.get_Aprimes()
         self.assertEquals(2, len(aPrimes))
 
+    def test_osk(self):
+        fold = '.((((((((((((...((.(((((((((((((((..((....))))))))........)))))..)))))).)))))))))))).'
+        seq =  'TGCTTTACTTGGAAAATTCGCTTGCACAAAATCAACGCCGCGGCTGATTTATTATTGATGTGCTCAAGCAAATTCAAGTGAAGCA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(5, len(aPrimes))
+
+    def test_k10(self):
+        fold = '.(((((((((((((((((........))))))).))).))))))).'
+        seq =  'ACTTGATTGTATTTTTAAATTAATTCTTAAAAACTACAAATTAAGA'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(2, len(aPrimes))
+
     def test_get_pair1(self):
         fold = '.(((...))).'
         folder = fn.Fold(fold)
@@ -628,6 +642,14 @@ class TestFolds(ut.TestCase):
         folder = fn.Fold(fold)
         pair = folder._get_pair(13)
         self.assertEquals(0, pair)
+
+    def test_corner_case(self):
+        fold = '(((((.(((...))).)))))......'
+        seq =  'GTTTTATCATTATGGGAAAATATAAGC'
+        folder = fn.Fold(fold, seq)
+        aPrimes = folder.get_Aprimes()
+        self.assertEquals(2, len(aPrimes))
+
 
 if __name__ == '__main__':
     ut.main()

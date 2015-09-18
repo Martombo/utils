@@ -271,9 +271,7 @@ class Fold():
             return self._rescue_hairy(pos, lenAG)
         if lenAG == 0:
             return 1
-        pair = self._get_pair(pos)
-        prev_pair = self._get_pair(pos - 1)
-        if pair - prev_pair in [1, -1]:
+        if self._is_match(pos - 1) and self._is_symm_match(pos, pos - 1): #corner case, see tests
             return lenAG + 1
         else:
             return 1
@@ -303,22 +301,6 @@ class Fold():
         fold = fold.replace('+',')')
         return (self.len - pos - 1, fold[::-1])
 
-    def _get_pair_pos(self, pos, fold=''):
-        """it only works for first match '('
-        for second matches ')', make a reverse of
-        pos, fold and also returned value
-        """
-        if not fold:
-            fold = self.fold
-        substr = self.fold[0:pos]
-        n_match = substr.count('(')
-        (pair_pos, opp_count) = self.len - 1, 0
-        while opp_count < n_match:
-            if fold[pair_pos] == ')':
-                opp_count += 1
-            pair_pos -= 1
-        return pair_pos
-
 
 class GappedSeq():
 
@@ -336,6 +318,7 @@ class GappedSeq():
                 stop = k
             if start and stop:
                 return start, stop
+        return None, None
 
     def get_gaps(self, seq_gap, seq):
         """inserts gaps from seq_gap to seq"""

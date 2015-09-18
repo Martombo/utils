@@ -33,6 +33,22 @@ class Bam:
         os.remove(self.bam_file.filename.decode())
         os.remove(self.bam_file.filename.decode() + '.bai')
 
+    def get_matching(self, chrom, pos, strand='', min_qual=40):
+        """
+        retrieves all reads that match the reference at pos
+        """
+        fetch = self.bam_file.fetch(chrom, pos, pos + 1)
+        matching_reads = []
+        for read in fetch:
+            if read.mapq >= min_qual:
+                if strand and strand == self._determine_strand(read):
+                    reader = self._read_reader(read.cigar, read.reference_start)
+                    matches = reader.get_matches()
+                    if pos in matches:
+                        matching_reads.append(read)
+        return matching_reads
+
+
     def get_coverage(self, chrom, start, stop, min_qual=40):
         """
         get the number of reads in region
@@ -120,8 +136,8 @@ class Bam:
         return is_in_intron
 
     def _is_around_site(self, read, start, stop):
-        read_splicer = self._read_splicer(read.cigar, read.reference_start)
-        read_splice_sites = read_splicer.get_sites()
+        read_splicer = self._read_reader(read.cigar, read.reference_start)
+        read_splice_sites = read_splicer.get_splice_sites()
         for site in read_splice_sites:
             if site[0] <= start and site[1] >= stop:
                 return True
@@ -136,8 +152,8 @@ class Bam:
         for read in self.bam_file.fetch():
             if read.mapq < min_qual:
                 continue
-            read_splicer = self._read_splicer(read.cigar, read.reference_start)
-            read_splice_sites = read_splicer.get_sites()
+            read_splicer = self._read_reader(read.cigar, read.reference_start)
+            read_splice_sites = read_splicer.get_splice_sites()
             if not read_splice_sites:
                 continue
             chrom = self.bam_file.getrname(read.reference_id)
@@ -196,7 +212,7 @@ class Bam:
             return sorted_bam_path + '.bam'
 
 
-    class _read_splicer:
+    class _read_reader:
         """
         retrieves read info about splicing (junction) gaps
         :param cigar: read cigar string
@@ -208,7 +224,17 @@ class Bam:
             self.cigar = cigar
             self.splice_sites = []
 
-        def get_sites(self):
+        def get_matches(self):
+            matches = []
+            for cigar_part in self.cigar:
+                if cigar_part[0] == 0:
+                    for k in range(cigar_part[1]):
+                        matches.append(self.pos + k)
+                if cigar_part[0] != 1:
+                    self._move_pos(cigar_part[1])
+            return matches
+
+        def get_splice_sites(self):
             """
             computes the donor and acceptor sites (junction) of a read
             :return list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
