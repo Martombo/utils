@@ -5,49 +5,42 @@ import subprocess as sp
 import pysam as ps
 import re
 
-class Bam:
+
+class Bam():
     """utility functions to parse bam"""
 
-    def __init__(self, bam_path='', sam_data='', reads_orientation='forward'):
+    def __init__(self, path, reads_orientation='forward'):
         """
         sam data can be provided for testing
         splices_dic contains all splice sites (key) mapped to a list with the count of the site and the intron coverage
         :param reads_orientation: either 'forward' or 'reverse'
         """
+        assert path
+        assert path[-4:] == '.bam'
+        assert os.path.isfile(path)
+        if not os.path.isfile(path + '.bai'):
+            p_index = sp.Popen(['samtools', 'index', path])
+            p_index.communicate()
+        assert os.path.isfile(path + '.bai')
+        self.path = path
+        self.pysam = ps.AlignmentFile(path, 'rb')
         self.reads_orientation = reads_orientation
         self.splices_dic = {}
-        if bam_path:
-            assert bam_path[-4:] == '.bam'
-            assert os.path.isfile(bam_path)
-        elif sam_data:
-            bam_path = self.Sam(sam_data = sam_data).toIndexedBam()
-            os.remove('tmp.sam')
-        else:
-            return
-        if not os.path.isfile(bam_path + '.bai'):
-            pIndex = sp.Popen(['samtools', 'index', bam_path])
-            pIndex.communicate()
-        self.bam_file = ps.AlignmentFile(bam_path,'rb')
-
-    def delete(self):
-        os.remove(self.bam_file.filename.decode())
-        os.remove(self.bam_file.filename.decode() + '.bai')
 
     def get_matching(self, chrom, pos, strand='', min_qual=40):
         """
         retrieves all reads that match the reference at pos
         """
-        fetch = self.bam_file.fetch(chrom, pos, pos + 1)
+        fetch = self.pysam.fetch(chrom, pos, pos + 1)
         matching_reads = []
         for read in fetch:
             if read.mapq >= min_qual:
                 if strand and strand == self._determine_strand(read):
-                    reader = self._read_reader(read.cigar, read.reference_start)
+                    reader = Read(read.cigar, read.reference_start)
                     matches = reader.get_matches()
                     if pos in matches:
                         matching_reads.append(read)
         return matching_reads
-
 
     def get_coverage(self, chrom, start, stop, min_qual=40):
         """
@@ -58,112 +51,35 @@ class Bam:
         :param stop: int stop
         :param min_qual: default TopHat: only uniquely mapped reads
         """
-        fetch = self.bam_file.fetch(chrom, start, stop)
+        fetch = self.pysam.fetch(chrom, start, stop)
         n_reads = 0
         for read in fetch:
             if read.mapq >= min_qual:
                 n_reads += 1
         return n_reads
 
-    def get_splicing_coverage(self, min_qual = 40, max_mm=0, max_sites_within = 0, min_overlap = 10):
-        """
-        get the number of reads from within splice site
-        :param chrom: str chromosome name
-        :param start: int start
-        :param stop: int stop
-        :param min_qual: default TopHat: only uniquely mapped reads
-        :param max_mm: max tolerated mismatches on read ( including indel
-        :param: min_overlap number of nucleotides inside splice junctions
-        """
-        for splice_site in self.splices_dic.keys():
-            (chrom, start, stop, strand) = splice_site.split('_')
-            start = int(start)
-            stop = int(stop)
-            (count, na) = self._count_coverage(chrom, start, stop, strand, min_qual, max_mm, min_overlap)
-            if na > max_sites_within:
-                self.splices_dic[splice_site].append('Na')
-            else:
-                self.splices_dic[splice_site].append(count)
-
-    def _count_coverage(self, chrom, start, stop, strand,  min_qual, max_mm, min_overlap):
-        """
-        returns the number of reads from within given region
-        reads is only counted if fully inside and with less than max_mm mismatches
-        """
-        fetch = self.bam_file.fetch(chrom, start, stop)
-        n_reads = 0
-        n_na = 0
-        for read in fetch:
-            if read.mapq  >= min_qual and strand == self._determine_strand(read) and not self._is_around_site(read, start, stop):
-                count = self._read_in_intron(read, start, stop, max_mm, min_overlap)
-                if  count <= 1:
-                    n_reads += count
-                else:
-                    n_na += 1
-        return (n_reads, n_na)
-
-    def _read_in_intron(self, read, start, stop, max_mm, min_overlap):
-        """
-        checks if a read is fully inside region and a good enough match
-        :param read: read of interest, pysam object
-        :param start: satrt of region
-        :param stop: end of region
-        :param max_mm: tolerate number of mismatches
-        :return: is_in_intron 0 not ,1 is in site 3: Na, other splice site within site thus biased coverage
-        """
-        is_in_intron = 1
-        leng = 0
-        mm = 0
-        has_intron = False
-
-        for c_part in read.cigar:
-            if c_part[0] != 1: # insertion = 1 no extension on refference
-                leng += c_part[1]
-            if c_part[0] != 0:
-                mm += c_part[1]
-            if c_part[0] == 3:
-                has_intron = True
-        if start > read.reference_start: # read befor start
-            overlap = leng - (start - read.reference_start)
-        elif stop < read.reference_start + leng : # read longer than junction
-            overlap = stop -read.reference_start
-        else:
-            overlap = leng
-        if overlap < min_overlap:
-            is_in_intron = 0
-        if has_intron:
-            is_in_intron = 2
-        return is_in_intron
-
-    def _is_around_site(self, read, start, stop):
-        read_splicer = self._read_reader(read.cigar, read.reference_start)
-        read_splice_sites = read_splicer.get_splice_sites()
-        for site in read_splice_sites:
-            if site[0] <= start and site[1] >= stop:
-                return True
-        return False
-
     def get_splice_sites(self, min_qual=40):
         """
         get splice sites counts as dictionary
-        :param min_qual: default TopHat only uniquely mapped reads
-        :return dict: {"chr1_12038_12759_+": 56, ...}
+        :param min_qual: 40 default (TopHat only uniquely mapped reads)
+        :return dict: key: junction location, value: count. eg: {"chr1_12038_13759_+": 56, ...}
         """
-        for read in self.bam_file.fetch():
+        for read in self.pysam.fetch():
             if read.mapq < min_qual:
                 continue
-            read_splicer = self._read_reader(read.cigar, read.reference_start)
+            read_splicer = Read(read.cigar, read.reference_start)
             read_splice_sites = read_splicer.get_splice_sites()
-            if not read_splice_sites:
-                continue
-            chrom = self.bam_file.getrname(read.reference_id)
-            for read_splice_site in read_splice_sites:
-                strand = self._determine_strand(read)
-                self._add2dict(read_splice_site, chrom, strand)
+            if read_splice_sites:
+                self._add_read_sites(read, read_splice_sites)
         return self.splices_dic
 
+    def _add_read_sites(self, read, read_splice_sites):
+        chrom = self.pysam.getrname(read.reference_id)
+        strand = self._determine_strand(read)
+        for read_splice_site in read_splice_sites:
+            self._add_site(read_splice_site, chrom, strand)
 
-    def _add2dict(self, splice_site, chrom, strand):
+    def _add_site(self, splice_site, chrom, strand):
         locus_string = '_'.join([str(x) for x in [chrom, splice_site[0], splice_site[1], strand]])
         if locus_string in self.splices_dic:
             self.splices_dic[locus_string] += 1
@@ -180,89 +96,100 @@ class Bam:
             strand_bool = not strand_bool
         return '+' if strand_bool else '-'
 
-    class Sam:
+    def delete(self):
+        os.remove(self.path)
+        os.remove(self.path + '.bai')
+
+class Sam:
+    """
+    handles Sam data or files.
+    raw data should be provided only for tests.
+    """
+
+    def __init__(self, sam_data='', sam_path=''):
+        assert bool(sam_data) != bool(sam_path)
+        if sam_data:
+            k = 1
+            while os.path.isfile('tmp%d.sam' % k): k += 1
+            sam_path = 'tmp%d.sam' % k
+            with open(sam_path, 'w') as fin:
+                fin.write(sam_data)
+        self.sam_path = sam_path
+
+    def to_indexed_bam(self):
+        bam_file = self._to_bam()
+        sorted_bam_path = self._sort(bam_file.filename.decode())
+        os.remove(bam_file.filename.decode())
+        return sorted_bam_path
+
+    def _to_bam(self):
+        tmp_bam_path = self.sam_path + '.bam'
+        p_view = sp.Popen(['samtools', 'view', '-Sb', '-o', tmp_bam_path, self.sam_path])
+        p_view.communicate()
+        assert os.path.isfile(tmp_bam_path)
+        return ps.AlignmentFile(tmp_bam_path, 'rb')
+
+    def _sort(self, bam_path):
+        sorted_bam_path = bam_path[:len(bam_path)-8]
+        ps.sort(bam_path, sorted_bam_path)
+        assert os.path.isfile(sorted_bam_path + '.bam')
+        return sorted_bam_path + '.bam'
+
+    def delete(self):
+        os.remove(self.sam_path)
+
+
+class Read:
+    """
+    retrieves read info, mostly about splicing (junction) gaps
+    :param cigar: read cigar string
+    :param start: read mapping start position
+    """
+    def __init__(self, cigar, start):
+        self.before_splice = True
+        self.pos = start
+        self.cigar = cigar
+        self.splice_sites = []
+
+    def get_matches(self):
+        matches = []
+        for cigar_part in self.cigar:
+            if cigar_part[0] == 0:
+                for k in range(cigar_part[1]):
+                    matches.append(self.pos + k)
+            if cigar_part[0] != 1:
+                self._move_pos(cigar_part[1])
+        return matches
+
+    def get_splice_sites(self):
         """
-        handles Sam data or files.
-        raw data should be provided only for tests.
+        computes the donor and acceptor sites (junction) of a read
+        :return list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
+                 None if read overlaps no junction
         """
+        for cigar_part in self.cigar:
+            if cigar_part[0] == 0:
+                self._match(cigar_part[1])
+            elif cigar_part[0] == 3:
+                self._non_match(cigar_part[1])
+            elif cigar_part[0] == 2:
+                self._move_pos(cigar_part[1])
+        return self.splice_sites
 
-        def __init__(self, sam_data='', sam_path=''):
-            assert bool(sam_data) != bool(sam_path)
-            if sam_data:
-                sam_path = 'tmp.sam'
-                with open(sam_path, 'w') as fin:
-                    fin.write(sam_data)
-            self.sam_path = sam_path
-
-        def toIndexedBam(self):
-            bam_file = self._toBam()
-            sorted_bam_path = self._sort(bam_file.filename.decode())
-            os.remove(bam_file.filename.decode())
-            return sorted_bam_path
-
-        def _toBam(self):
-            tmp_bam_path = self.sam_path + '.bam'
-            pView = sp.Popen(['samtools', 'view', '-Sb', '-o', tmp_bam_path, self.sam_path])
-            pView.communicate()
-            return ps.AlignmentFile(tmp_bam_path, 'rb')
-
-        def _sort(self, bam_path):
-            sorted_bam_path = bam_path[:len(bam_path)-8]
-            ps.sort(bam_path, sorted_bam_path)
-            return sorted_bam_path + '.bam'
-
-
-    class _read_reader:
-        """
-        retrieves read info about splicing (junction) gaps
-        :param cigar: read cigar string
-        :param start: read mapping start position
-        """
-        def __init__(self, cigar, start):
+    def _match(self, leng):
+        if not self.before_splice:
+            self.splice_sites.append((self.start_site,self.pos))
             self.before_splice = True
-            self.pos = start
-            self.cigar = cigar
-            self.splice_sites = []
+        self._move_pos(leng)
 
-        def get_matches(self):
-            matches = []
-            for cigar_part in self.cigar:
-                if cigar_part[0] == 0:
-                    for k in range(cigar_part[1]):
-                        matches.append(self.pos + k)
-                if cigar_part[0] != 1:
-                    self._move_pos(cigar_part[1])
-            return matches
+    def _non_match(self, leng):
+        if self.before_splice:
+            self.before_splice = False
+            self.start_site = self.pos
+        self._move_pos(leng)
 
-        def get_splice_sites(self):
-            """
-            computes the donor and acceptor sites (junction) of a read
-            :return list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
-                     None if read overlaps no junction
-            """
-            for cigar_part in self.cigar:
-                if cigar_part[0] == 0:
-                    self._match(cigar_part[1])
-                elif cigar_part[0] == 3:
-                    self._non_match(cigar_part[1])
-                elif cigar_part[0] == 2:
-                    self._move_pos(cigar_part[1])
-            return self.splice_sites
-
-        def _match(self, leng):
-            if not self.before_splice:
-                self.splice_sites.append((self.start_site,self.pos))
-                self.before_splice = True
-            self._move_pos(leng)
-
-        def _non_match(self, leng):
-            if self.before_splice:
-                self.before_splice = False
-                self.start_site = self.pos
-            self._move_pos(leng)
-
-        def _move_pos(self, leng):
-            self.pos += leng
+    def _move_pos(self, leng):
+        self.pos += leng
 
 
 class Gtf:

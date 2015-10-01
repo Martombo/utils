@@ -343,66 +343,71 @@ class TestFoldsCounter(ut.TestCase):
 
 class TestBam(ut.TestCase):
 
-    read = pysam.AlignedSegment()
-    bam_fields = ['asd', '0', 'chr1', '100', '50', '100M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
-    splic_fields = ['asd', '0', 'chr1', '100', '50', '50M50N50M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
-    header = '\t'.join(['@SQ','SN:chr1','LN:1000000'])
-    parser = ps.Bam()
-    sam_data = '\n'.join([header, '\t'.join(bam_fields)])
-    splic_data = '\n'.join([header, '\t'.join(splic_fields)])
-    parser_sam = ps.Bam(sam_data=sam_data)
-    parser_splic = ps.Bam(sam_data=splic_data)
+    @classmethod
+    def setUpClass(cls):
+        cls.read = pysam.AlignedSegment()
+        bam_fields = ['asd', '0', 'chr1', '100', '50', '100M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
+        splic_fields = ['asd', '0', 'chr1', '100', '50', '50M50N50M', '*', '0', '0', 'A'*100, 'A'*100 + '\n']
+        header = '\t'.join(['@SQ','SN:chr1','LN:1000000'])
+        sam_data = '\n'.join([header, '\t'.join(bam_fields)])
+        splic_data = '\n'.join([header, '\t'.join(splic_fields)])
+        parser_sam = ps.Sam(sam_data)
+        cls.parser_bam = ps.Bam(parser_sam.to_indexed_bam())
+        parser_splic = ps.Sam(splic_data)
+        cls.parser_splic_bam = ps.Bam(parser_splic.to_indexed_bam())
+        parser_sam.delete()
+        parser_splic.delete()
 
+    @classmethod
+    def tearDownClass(cls):
+        cls.parser_bam.delete()
+        cls.parser_splic_bam.delete()
 
     def test_det_strand(self):
         self.read.is_reverse = False
         self.read.is_read2 = False
-        strand = self.parser._determine_strand(self.read)
+        strand = self.parser_bam._determine_strand(self.read)
         self.assertEquals('+', strand)
 
     def test_det_strand_rev(self):
         self.read.is_reverse = True
         self.read.is_read2 = False
-        strand = self.parser._determine_strand(self.read)
-        self.assertEquals('-', strand)
-
-    def test_det_strand_mate(self):
-        self.read.is_reverse = False
-        self.read.is_read2 = True
-        strand = self.parser._determine_strand(self.read)
+        self.assertNotEqual('reverse',self.parser_bam.reads_orientation)
+        strand = self.parser_bam._determine_strand(self.read)
         self.assertEquals('-', strand)
 
     def test_det_strand_rev_mate(self):
         self.read.is_reverse = True
         self.read.is_read2 = True
-        strand = self.parser._determine_strand(self.read)
+        strand = self.parser_bam._determine_strand(self.read)
         self.assertEquals('+', strand)
 
     def test_det_strand_opp(self):
-        parser = ps.Bam(reads_orientation='reverse')
         self.read.is_reverse = False
         self.read.is_read2 = False
-        strand = parser._determine_strand(self.read)
+        self.parser_bam.reads_orientation = 'reverse'
+        strand = self.parser_bam._determine_strand(self.read)
+        self.parser_bam.reads_orientation = 'forward'
         self.assertEquals('-', strand)
 
     def test_add2dict(self):
-        self.parser._add2dict([100,200], 'chr1', '+')
-        dic = self.parser.splices_dic
+        self.parser_bam._add_site([100,200], 'chr1', '+')
+        dic = self.parser_bam.splices_dic
         self.assertEquals(1, len(dic))
         self.assertEquals(1, dic['chr1_100_200_+'])
-        self.parser.splices_dic = {}
+        self.parser_bam.splices_dic = {}
 
     def test_add2dict2(self):
-        self.parser._add2dict([300,500], 'chr2', '-')
-        self.parser._add2dict([300,500], 'chr2', '-')
-        dic = self.parser.splices_dic
+        self.parser_bam._add_site([300,500], 'chr2', '-')
+        self.parser_bam._add_site([300,500], 'chr2', '-')
+        dic = self.parser_bam.splices_dic
         self.assertEquals(2, dic['chr2_300_500_-'])
-        self.parser.splices_dic = {}
+        self.parser_bam.splices_dic = {}
 
-    def test_splicer_get_sites(self):
+    def test_read_get_splice_sites(self):
         cigar = [[0, 10], [3, 100], [0, 10]]
         reference_start = 90
-        splicer = ps.Bam._read_reader(cigar, reference_start)
+        splicer = ps.Read(cigar, reference_start)
         sites = splicer.get_splice_sites()
         self.assertEquals(1, len(sites))
         self.assertEquals(2, len(sites[0]))
@@ -410,16 +415,14 @@ class TestBam(ut.TestCase):
         self.assertEquals(200, sites[0][1])
 
     def test_get_coverage(self):
-        cov = self.parser_sam.get_coverage('chr1', 10, 1000, min_qual=0)
+        cov = self.parser_bam.get_coverage('chr1', 10, 1000, min_qual=0)
         self.assertEquals(cov, 1)
-        self.parser_sam.delete()
 
     def test_get_splice_sites(self):
-        splice_sites = self.parser_splic.get_splice_sites()
+        splice_sites = self.parser_splic_bam.get_splice_sites()
         self.assertEquals(1, len(splice_sites))
         self.assertTrue('chr1_149_199_+' in splice_sites)
         self.assertTrue(1, splice_sites['chr1_149_199_+'])
-
 
 class TestMaf(ut.TestCase):
     dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
