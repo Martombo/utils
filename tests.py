@@ -366,27 +366,27 @@ class TestBam(ut.TestCase):
     def test_det_strand(self):
         self.read.is_reverse = False
         self.read.is_read2 = False
-        strand = self.parser_bam._determine_strand(self.read)
+        strand = self.parser_bam.determine_strand(self.read)
         self.assertEquals('+', strand)
 
     def test_det_strand_rev(self):
         self.read.is_reverse = True
         self.read.is_read2 = False
         self.assertNotEqual('reverse',self.parser_bam.reads_orientation)
-        strand = self.parser_bam._determine_strand(self.read)
+        strand = self.parser_bam.determine_strand(self.read)
         self.assertEquals('-', strand)
 
     def test_det_strand_rev_mate(self):
         self.read.is_reverse = True
         self.read.is_read2 = True
-        strand = self.parser_bam._determine_strand(self.read)
+        strand = self.parser_bam.determine_strand(self.read)
         self.assertEquals('+', strand)
 
     def test_det_strand_opp(self):
         self.read.is_reverse = False
         self.read.is_read2 = False
         self.parser_bam.reads_orientation = 'reverse'
-        strand = self.parser_bam._determine_strand(self.read)
+        strand = self.parser_bam.determine_strand(self.read)
         self.parser_bam.reads_orientation = 'forward'
         self.assertEquals('-', strand)
 

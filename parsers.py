@@ -35,7 +35,7 @@ class Bam():
         matching_reads = []
         for read in fetch:
             if read.mapq >= min_qual:
-                if strand and strand == self._determine_strand(read):
+                if strand and strand == self.determine_strand(read):
                     reader = Read(read.cigar, read.reference_start)
                     matches = reader.get_matches()
                     if pos in matches:
@@ -75,7 +75,7 @@ class Bam():
 
     def _add_read_sites(self, read, read_splice_sites):
         chrom = self.pysam.getrname(read.reference_id)
-        strand = self._determine_strand(read)
+        strand = self.determine_strand(read)
         for read_splice_site in read_splice_sites:
             self._add_site(read_splice_site, chrom, strand)
 
@@ -86,7 +86,7 @@ class Bam():
         else:
             self.splices_dic[locus_string] = 1
 
-    def _determine_strand(self, read):
+    def determine_strand(self, read):
         strand_bool = True
         if read.is_reverse:
             strand_bool = not strand_bool
@@ -95,6 +95,9 @@ class Bam():
         if read.is_read2:
             strand_bool = not strand_bool
         return '+' if strand_bool else '-'
+
+    def fetch(self, chrom, start, stop):
+        return self.pysam.fetch(chrom, start, stop)
 
     def delete(self):
         os.remove(self.path)
