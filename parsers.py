@@ -155,6 +155,10 @@ class Read:
         self.splice_sites = []
 
     def get_matches(self):
+        """
+        determines the nucleotide positions where read matches reference
+        :return: list of int
+        """
         matches = []
         for cigar_part in self.cigar:
             if cigar_part[0] == 0:
@@ -178,6 +182,17 @@ class Read:
             elif cigar_part[0] == 2:
                 self._move_pos(cigar_part[1])
         return self.splice_sites
+
+    def get_mm_indels(self):
+        """
+        computes the total number of mismatches and indels bases
+        :return: int
+        """
+        mm = 0
+        for cigar_token in self.cigar:
+            if cigar_token[0] != 0:
+                mm += cigar_token[1]
+        return mm
 
     def _match(self, leng):
         if not self.before_splice:
