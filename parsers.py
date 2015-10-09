@@ -37,8 +37,7 @@ class Bam():
             if read.mapq >= min_qual:
                 if strand and strand == self.determine_strand(read):
                     reader = Read(read.cigar, read.reference_start)
-                    matches = reader.get_matches()
-                    if pos in matches:
+                    if pos in reader.matches:
                         matching_reads.append(read)
         return matching_reads
 
@@ -67,10 +66,9 @@ class Bam():
         for read in self.pysam.fetch():
             if read.mapq < min_qual:
                 continue
-            read_splicer = Read(read.cigar, read.reference_start)
-            read_splice_sites = read_splicer.get_splice_sites()
-            if read_splice_sites:
-                self._add_read_sites(read, read_splice_sites)
+            reader = Read(read.cigar, read.reference_start, only_splicing=True)
+            if reader.splice_sites:
+                self._add_read_sites(read, reader.splice_sites)
         return self.splices_dic
 
     def _add_read_sites(self, read, read_splice_sites):
@@ -144,55 +142,68 @@ class Sam:
 
 class Read:
     """
-    retrieves read info, mostly about splicing (junction) gaps
+    retrieves read info about mapping, mostly splicing (junction) gaps
     :param cigar: read cigar string
     :param start: read mapping start position
     """
-    def __init__(self, cigar, start):
+    def __init__(self, cigar, start, only_splicing = False):
         self.before_splice = True
         self.pos = start
         self.cigar = cigar
-        self.splice_sites = []
+        self.splice_sites, self.matches, self.mm_indels, self.nonmatches = [], [], [], []
+        if only_splicing:
+            self._get_splicing_info()
+        else:
+            self._get_mapping_info()
 
-    def get_matches(self):
+    def _get_splicing_info(self):
         """
-        determines the nucleotide positions where read matches reference
-        :return: list of int
-        """
-        matches = []
-        for cigar_part in self.cigar:
-            if cigar_part[0] == 0:
-                for k in range(cigar_part[1]):
-                    matches.append(self.pos + k)
-            if cigar_part[0] != 1:
-                self._move_pos(cigar_part[1])
-        return matches
-
-    def get_splice_sites(self):
-        """
-        computes the donor and acceptor sites (junction) of a read
-        :return list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
+        computes:
+        splice_sites: the donor and acceptor sites (junction) of a read
+        list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
                  None if read overlaps no junction
         """
-        for cigar_part in self.cigar:
-            if cigar_part[0] == 0:
-                self._match(cigar_part[1])
-            elif cigar_part[0] == 3:
-                self._non_match(cigar_part[1])
-            elif cigar_part[0] == 2:
-                self._move_pos(cigar_part[1])
-        return self.splice_sites
-
-    def get_mm_indels(self):
-        """
-        computes the total number of mismatches and indels bases
-        :return: int
-        """
-        mm = 0
         for cigar_token in self.cigar:
-            if cigar_token[0] != 0:
-                mm += cigar_token[1]
-        return mm
+            if cigar_token[0] == 0:
+                self._match(cigar_token[1])
+            elif cigar_token[0] == 1:
+                pass
+            elif cigar_token[0] == 2:
+                self._move_pos(cigar_token[1])
+            elif cigar_token[0] == 3:
+                self._non_match(cigar_token[1])
+            else:
+                break
+
+    def _get_mapping_info(self):
+        """
+        computes:
+        1) splice_sites: the donor and acceptor sites (junction) of a read
+        list of donor and acceptor position: [(152683, 153107), (153194, 153867)]
+                 None if read overlaps no junction
+        2) mm_indels: the list of base positions with mismatches or indels
+        3) matches: the list of base positions with matches
+        4) nonmatches: the list of base positions with nonmatches
+        """
+        for cigar_token in self.cigar:
+            if cigar_token[0] == 0:
+                for k in range(cigar_token[1]):
+                    self.matches.append(self.pos + k)
+                self._match(cigar_token[1])
+            elif cigar_token[0] == 1:
+                for k in range(cigar_token[1]):
+                    self.mm_indels.append(self.pos + k)
+            elif cigar_token[0] == 2:
+                for k in range(cigar_token[1]):
+                    self.mm_indels.append(self.pos + k)
+                self._move_pos(cigar_token[1])
+            elif cigar_token[0] == 3:
+                for k in range(cigar_token[1]):
+                    self.mm_indels.append(self.pos + k)
+                    self.nonmatches.append(self.pos + k)
+                self._non_match(cigar_token[1])
+            else:
+                break
 
     def _match(self, leng):
         if not self.before_splice:

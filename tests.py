@@ -408,11 +408,29 @@ class TestBam(ut.TestCase):
         cigar = [[0, 10], [3, 100], [0, 10]]
         reference_start = 90
         splicer = ps.Read(cigar, reference_start)
-        sites = splicer.get_splice_sites()
+        sites = splicer.splice_sites
         self.assertEquals(1, len(sites))
         self.assertEquals(2, len(sites[0]))
         self.assertEquals(100, sites[0][0])
         self.assertEquals(200, sites[0][1])
+
+    def test_read_get_nonmatch(self):
+        cigar = [[0, 100], [3, 100], [0, 100]]
+        reference_start = 100
+        splicer = ps.Read(cigar, reference_start)
+        nonmatches = splicer.nonmatches
+        self.assertEquals(100,len(nonmatches))
+        self.assertEquals(200,nonmatches[0])
+        self.assertEquals(299,nonmatches[99])
+
+    def test_read_get_match(self):
+        cigar = [[0, 100], [3, 100], [0, 100]]
+        reference_start = 100
+        splicer = ps.Read(cigar, reference_start)
+        matches = splicer.matches
+        self.assertEquals(200,len(matches))
+        self.assertEquals(100,matches[0])
+        self.assertEquals(399,matches[199])
 
     def test_get_coverage(self):
         cov = self.parser_bam.get_coverage('chr1', 10, 1000, min_qual=0)
