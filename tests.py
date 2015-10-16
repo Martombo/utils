@@ -272,6 +272,7 @@ class TestIntersecter(ut.TestCase):
         results = dummy_counter.get_results()
         self.assertEquals(1, len(results))
 
+
 class TestFoldsCounter(ut.TestCase):
 
     exons = [['1', 1, 10, '+'], ['1', 101, 110, '+']]
@@ -442,6 +443,14 @@ class TestBam(ut.TestCase):
         self.assertTrue('chr1_149_199_+' in splice_sites)
         self.assertTrue(1, splice_sites['chr1_149_199_+'])
 
+    def test_unstranded(self):
+        self.read.is_reverse = True
+        self.read.is_read2 = False
+        self.parser_bam.reads_orientation = 'mixed'
+        strand = self.parser_bam.determine_strand(self.read)
+        self.assertEquals('NA', strand)
+
+
 class TestMaf(ut.TestCase):
     dro_genomes = ['dro' + x for x in ['Bia2', 'Ele2', 'Ere2', 'Eug2', 'Moj3', 'Per1', 'Rho2',
                                        'Sec1', 'Sim1', 'Suz1', 'Tak2', 'Vir3', 'Yak3']]
@@ -503,7 +512,6 @@ class TestMaf(ut.TestCase):
             self.assertEquals('TGGCATTCGGTCGGGTTTGCGGT', region['droSec1'])
 
 
-
 class TransExons(ut.TestCase):
 
     def test_rel_pos_trans(self):
@@ -533,6 +541,7 @@ class TransExons(ut.TestCase):
         te_manager = fn.TransExons(trans_exon)
         rel_pos = te_manager.rel_pos_trans('t1',pos)
         self.assertEquals(rel_pos, [150])
+
 
 class TestFolds(ut.TestCase):
 

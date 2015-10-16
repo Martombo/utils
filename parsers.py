@@ -13,7 +13,7 @@ class Bam():
         """
         sam data can be provided for testing
         splices_dic contains all splice sites (key) mapped to a list with the count of the site and the intron coverage
-        :param reads_orientation: either 'forward' or 'reverse'
+        :param reads_orientation: either 'forward', 'reverse' or 'mixed'
         """
         assert path
         assert path[-4:] == '.bam'
@@ -22,6 +22,7 @@ class Bam():
             p_index = sp.Popen(['samtools', 'index', path])
             p_index.communicate()
         assert os.path.isfile(path + '.bai')
+        assert reads_orientation in ['forward', 'reverse', 'mixed']
         self.path = path
         self.pysam = ps.AlignmentFile(path, 'rb')
         self.reads_orientation = reads_orientation
@@ -85,6 +86,8 @@ class Bam():
             self.splices_dic[locus_string] = 1
 
     def determine_strand(self, read):
+        if self.reads_orientation == 'mixed':
+            return 'NA'
         strand_bool = True
         if read.is_reverse:
             strand_bool = not strand_bool
